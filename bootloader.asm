@@ -5,8 +5,8 @@
          BEQ     $0118
          CMPB    #$20
          BEQ     $0172
-         CMPB    #$30
-         JSR     $030A
+         CMPB    #$45
+         lBEQ     $030A
          BNE     $0104
          LDAB    #$11
          JSR     $00,$0188
@@ -47,7 +47,7 @@
          ANDA    #$01
          BEQ     $0188
          STAB    $7C0F,Z
-         LDD     #$0320
+         LDD     #$0043         ; this is the TX delay interval
          JSR     $00,$01AE
          RTS
          LDAA    $7C0D,Z
@@ -157,13 +157,35 @@
          TPA
          LDAB    #$A5
          RTS
-         LDAB    #4
-         TBXK
-         LDX     #0
-         LDAB    0,X
-         JSR     $00,$0188
-         AIX     #1
-         TXKB
-         CMPB    #8
-         BNE     $0312
-         RTS
+;  do_command45:
+         ldab    #$46            ; sequence will be:
+                                 ; 0x45 0x07 0xFF 0xBF 0x00 0x40 request
+                                 ; 0x46 0x07 0xFF 0xBF 0x00 0x40 response 
+                                 ; and should return (in this example) 64 bytes from 0x7FFBF to 0x7FFFF
+         jsr     $00,$0188       ; TX 0x46 as 0x45 acknowledge
+         jsr     $00,$019E       ; RX
+         tbxk                    ; RX Byte0 bank / XK e.g. 0x07
+         jsr     $00,$0188       ; echo B0
+         jsr     $00,$019E       ; RX Byte1 IX high byte, e.g. 0xFF
+         stab    $0366
+         jsr     $00,$0188       ; echo B1
+         jsr     $00,$019E       ; RX Byte2 IX low , e.g. 0xBF
+         stab    $0367           
+         ldx     $0366           ; X is now XK:FFBF - we go up from here
+         jsr     $00,$0188       ; echo B2 
+         jsr     $00,$019E       ; RX Byte3 counter high byte, e.g. 0x00
+         stab    $01B6
+         jsr     $00,$0188       ; echo B3
+         jsr     $00,$019E       ; RX Byte4 counter low byte, e.g. 0x40
+         stab    $01B7
+         lde     $01B6           ; E is the byte counter
+         jsr     $00,$0188       ; echo B4
+;  Rd_xmit:
+         ldab    0,X
+         jsr     $00,$0188       ; Echo byte at address X
+         aix     #$01            ; increment the address counter 
+         tste    
+         lbeq    $0104
+         sube    #$01            ; decrement the byte counter
+         bra     $0352           ; if not zero loop
+         nop                     ; this is the $0366 word we pull E from
