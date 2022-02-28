@@ -167,45 +167,37 @@
          tbxk
          ldx     #$0              ; 0x40000
          ldab    #$50
-         jsr     $03A6           ; init GPT
-         jsr     $03B2           ; check ready
+         jsr     $0388           ; init GPT
+         jsr     $0394           ; check ready
          CMPB    #$00
-         beq     $0344
+         beq     $0362
          CMPB    #$01
-         beq     $0350
+         beq     $0346
          CMPB    #$02
-         beq     $035C
+         beq     $034C
          CMPB    #$03
-         beq     $0368
+         beq     $0352
          CMPB    #$04
-         beq     $0374
+         beq     $0358
          jsr     $00,$0128       ; B will contain error or success
          LBRA    $0104
    ; bank0
-         ldab    #$4
-         tbxk
-         ldx     #$0000          ; 0x40000
-         jsr     $0380          ; jump erase flash
+                                 ; XK:IX = 0x40000
+         bra     $0362          ; jump erase flash
    ; bank1
-         ldab    #$4
-         tbxk
-         ldx     #$4000          ; 0x44000
-         jsr     $0380          ; jump erase flash
+         ldx     #$4000          ; XK:IX = 0x44000
+         bra     $0362          ; jump erase flash
    ; bank2
-         ldab    #$4
-         tbxk
-         ldx     #$6000          ; 0x46000
-         jsr     $0380          ; jump erase flash
+         ldx     #$6000          ; XK:IX = 0x46000
+         bra     $0362          ; jump erase flash
    ; bank3
-         ldab    #$4
-         tbxk
-         ldx     #$8000          ; 0x48000
-         jsr     $0380          ; jump erase flash
+         ldx     #$8000          ; XK:IX = 0x48000
+         bra     $0362          ; jump erase flash
    ; bank4
          ldab    #$6
          tbxk
-         ldx     #$0000          ; 0x44000
-         jsr     $0380           ; jump erase flash
+         ldx     #$0000          ; XK:IX = 0x60000
+         bra     $0362           ; jump erase flash
 ; flash erase function
          ldd     #$20            ; CMD  Erase
          std     0,X             ; Block Address
@@ -226,22 +218,22 @@
          stab    $7921,Z         ; Timer Mask Register 2 (TMSK2)
          rts
 ; Check flash CSM ready
-         jsr     $0390           ; set timeout
+         jsr     $0372           ; set timeout
          ldab    #$0A            ; 10 attempts with 256 divider ~ 10 seconds
          stab    $0306
   ; not ready         
-         brclr   $7922,Z,#$10,$03D0 ; Check Flag Timeout
-         jsr     $0390           ; Set tmeout - new attempt
+         brclr   $7922,Z,#$10,$03B2 ; Check Flag Timeout
+         jsr     $0372           ; Set tmeout - new attempt
          decw    $0306
-         bne     $03D0
+         bne     $03B2
          ldab    #$80            ; return error "not ready"
-         bra     $03E4           ; set error abd bail 
+         bra     $03C6           ; set error abd bail 
   ; check ready       
          ldd     #$70            ; CMD Read Status Register
          std     0,X
          ldd     0,X             ; Read Status registr
          andd    #$80            ; check Flag Ready
-         beq     $03BC           ; no,repeat check flag
+         beq     $03B2           ; no,repeat check flag
          ldd     0,X             ; else
          andd    #$78            ; Check for other errors in the status register.
   ; bail
