@@ -1,35 +1,35 @@
          ORG     $0100
-         LBRA    $0152
-         JSR     $00,$013E
+         LBRA    SETUP
+START:   JSR     RXBYTE
          CMPB    #$10           ; cmd 10 doesn't have a use yet
-         lBEQ     $0104
+         lBEQ    START
          CMPB    #$20           ; cmd 20 is bank erase
-         LBEQ    $0308
+         LBEQ    CMD20
          CMPB    #$30
-         lBEQ     $0104
+         lBEQ    START
          CMPB    #$40
-         lBEQ     $0104
+         lBEQ    START
          CMPB    #$45           ; bulk memory dump
-         lBEQ    $02AA
-         BNE     $0104
-         LDAA    $7C0C,Z        ; TX function
+         lBEQ    CMD_45
+         BNE     START
+TXBYTE:  LDAA    $7C0C,Z        ; TX function
          ANDA    #$01
-         BEQ     $0128
+         BEQ     TXBYTE
          STAB    $7C0F,Z
          LDD     #$0043         ; this is the TX delay interval
-         JSR     $00,$014E
+         JSR     DELAY
          RTS
-         LDAA    $7C0D,Z        ; RX function
+RXBYTE:  LDAA    $7C0D,Z        ; RX function
          ANDA    #$42
          CMPA    #$40
-         BNE     $013E
+         BNE     RXBYTE
          LDAB    $7C0F,Z
          RTS
-         SUBD    #$0001         ; Delay function
-         BNE     $014E
+DELAY:   SUBD    #$0001         ; Delay function
+         BNE     DELAY
          RTS
-         NOP                    ; Reader X byte
-         ORP     #$00E0
+RDR_X:   NOP                    ; Reader X byte
+SETUP:   ORP     #$00E0
          LDAB    #$0F
          TBZK
          LDZ     #$8000
@@ -70,16 +70,16 @@
          CLRD
          LDE     #$0824
          STD     E,Z
-         ADDE    #$04
+LOOP1:   ADDE    #$04
          CPE     #$0838
-         BLS     $01EA
+         BLS     LOOP1
          CLR     $7920,Z
          BCLRW   $0860,Z,#$2000
-         JSR     $00,$020A
+         JSR     QSPI
          LDAB    #$22
-         JSR     $00,$0128
-         JMP     $00,$0104
-         LDD     #$4088
+         JSR     TXBYTE
+         JMP     START
+QSPI:    LDD     #$4088
          STD     $7C00,Z
          LDAA    #$06
          STAA    $7C04,Z
@@ -111,130 +111,126 @@
          STD     $7D24,Z
          LDD     #$0202
          STD     $7C1C,Z
-         JSR     $00,$0284
+         JSR     START_SPI
          RTS
-         BCLR    $7C1F,Z,#$80
+START_SPI: BCLR    $7C1F,Z,#$80
          BSET    $7C1A,Z,#$80
          CLRA
-         DECA
-         BEQ     $02A0
-         BRCLR   $7C1F,Z,#$80,$028E
+BUSYLOOP: DECA
+         BEQ     SET_V
+         BRCLR   $7C1F,Z,#$80,BUSYLOOP
          BCLR    $7C1F,Z,#$80
          TSTA
-         BRA     $02AA
-         ORP     #$0100
+         BRA     SPI_RTN
+SET_V:   ORP     #$0100
          TPA
          LDAB    #$A5
-         RTS
+SPI_RTN: RTS
 ;  Command 45 / Memory dump:
-         ldab    #$46            ; sequence will be:
+CMD_45:  ldab    #$46            ; sequence will be:
                                  ; 0x45 0x07 0xFF 0xBF 0x00 0x40 request
                                  ; 0x46 0x07 0xFF 0xBF 0x00 0x40 response 
                                  ; and should return (in this example) 64 bytes from 0x7FFBF to 0x7FFFF
-         jsr     $00,$0128       ; TX 0x46 as 0x45 acknowledge
-         jsr     $00,$013E       ; RX
+         jsr     TXBYTE       ; TX 0x46 as 0x45 acknowledge
+         jsr     RXBYTE       ; RX
          tbxk                    ; RX Byte0 bank / XK e.g. 0x07
-         jsr     $00,$0128       ; echo B0
-         jsr     $00,$013E       ; RX Byte1 IX high byte, e.g. 0xFF
-         stab    $0306
-         jsr     $00,$0128       ; echo B1
-         jsr     $00,$013E       ; RX Byte2 IX low , e.g. 0xBF
-         stab    $0307           
-         ldx     $0306           ; X is now XK:FFBF - we go up from here
-         jsr     $00,$0128       ; echo B2 
-         jsr     $00,$013E       ; RX Byte3 counter high byte, e.g. 0x00
-         stab    $0156
-         jsr     $00,$0128       ; echo B3
-         jsr     $00,$013E       ; RX Byte4 counter low byte, e.g. 0x40
-         stab    $0157
-         lde     $0156           ; E is the byte counter
-         jsr     $00,$0128       ; echo B4
-;  Rd_xmit:
-         ldab    0,X
-         jsr     $00,$0128       ; Echo byte at address X
+         jsr     TXBYTE       ; echo B0
+         jsr     RXBYTE       ; RX Byte1 IX high byte, e.g. 0xFF
+         stab    ADRWORD
+         jsr     TXBYTE       ; echo B1
+         jsr     RXBYTE       ; RX Byte2 IX low , e.g. 0xBF
+         stab    ADRWORD+1     
+         ldx     ADRWORD         ; X is now XK:FFBF - we go up from here
+         jsr     TXBYTE       ; echo B2 
+         jsr     RXBYTE       ; RX Byte3 counter high byte, e.g. 0x00
+         stab    RDR_X
+         jsr     TXBYTE       ; echo B3
+         jsr     RXBYTE       ; RX Byte4 counter low byte, e.g. 0x40
+         stab    RDR_X+1
+         jsr     TXBYTE       ; echo B4
+RDRLOOP: ldab    0,X
+         jsr     TXBYTE       ; Echo byte at address X
          aix     #$01            ; increment the address counter 
-         tste    
-         lbeq    $0104
-         sube    #$01            ; decrement the byte counter
-         bra     $02F2           ; if not zero loop
-         nop                     ; this is the memory word we pull E from
-; Command 20 / flash erase:
-         ldab    #$21            ; echo 21 for 20 acknowledge
-         jsr     $00,$0128
-         jsr     $00,$013E       ; read bank 0x00 - 0x04
-         jsr     $00,$0128       ; echo bank
+         decw    RDR_X
+         bne     RDRLOOP
+         lbra    START
+ADRWORD: nop                     ; this is the memory word we pull E from
+
+CMD20:   ldab    #$21            ; echo 21 for 20 acknowledge
+         jsr     TXBYTE
+         jsr     RXBYTE       ; read bank 0x00 - 0x04
+         jsr     TXBYTE       ; echo bank
          ldab    #$4
          tbxk
          ldx     #$0              ; 0x40000
          ldab    #$50
-         jsr     $0388           ; init GPT
-         jsr     $0394           ; check ready
+         jsr     INITGPT         ; init GPT
+         jsr     CSM_RDY         ; check ready
          CMPB    #$00
-         beq     $0362
+         beq     BANK0
          CMPB    #$01
-         beq     $0346
+         beq     BANK1
          CMPB    #$02
-         beq     $034C
+         beq     BANK2
          CMPB    #$03
-         beq     $0352
+         beq     BANK3
          CMPB    #$04
-         beq     $0358
-         jsr     $00,$0128       ; B will contain error or success
-         LBRA    $0104
-   ; bank0
+         beq     BANK4
+
+TX_RTN:  jsr     TXBYTE       ; B will contain error or success
+         LBRA    START
                                  ; XK:IX = 0x40000
-         bra     $0362          ; jump erase flash
-   ; bank1
-         ldx     #$4000          ; XK:IX = 0x44000
-         bra     $0362          ; jump erase flash
-   ; bank2
-         ldx     #$6000          ; XK:IX = 0x46000
-         bra     $0362          ; jump erase flash
-   ; bank3
-         ldx     #$8000          ; XK:IX = 0x48000
-         bra     $0362          ; jump erase flash
-   ; bank4
-         ldab    #$6
+BANK0:   bra     ERASE          ; jump erase flash
+
+BANK1:   ldx     #$4000          ; XK:IX = 0x44000
+         bra     ERASE          ; jump erase flash
+
+BANK2:   ldx     #$6000          ; XK:IX = 0x46000
+         bra     ERASE          ; jump erase flash
+
+BANK3:   ldx     #$8000          ; XK:IX = 0x48000
+         bra     ERASE          ; jump erase flash
+
+BANK4:   ldab    #$6
          tbxk
          ldx     #$0000          ; XK:IX = 0x60000
-         bra     $0362           ; jump erase flash
-; flash erase function
-         ldd     #$20            ; CMD  Erase
+         bra     ERASE           ; jump erase flash
+
+ERASE:   ldd     #$20            ; CMD  Erase
          std     0,X             ; Block Address
          ldd     #$0D0           ; CMD Erase Resume/Erase Confirm
          std     0,X
          ldab    #$22            ; success
-         BRA     $033C
+         BRA     TX_RTN
 ; Set timeout
-         ldd     $790A,Z         ; Timer Counter Register (TCNT)
-         addd    #$F424
+TIMEOUT: ldd     $790A,Z         ; Timer Counter Register (TCNT)
+         addd    #$0F424
          std     $7916,Z         ; Timer Output Compare Register 2 (TOC2)
          ldab    $7922,Z         ; Timer Flag Register 1 (TFLG1)
          bclr    $7922,Z,#$10
          rts
 ; Init GPT
-         clr     $791E,Z         ; Timer Control Register 1 (TCTL1)
+INITGPT: clr     $791E,Z         ; Timer Control Register 1 (TCTL1)
          ldab    #$6              ; 256 divider
          stab    $7921,Z         ; Timer Mask Register 2 (TMSK2)
          rts
 ; Check flash CSM ready
-         jsr     $0372           ; set timeout
+CSM_RDY: jsr     TIMEOUT         ; set timeout
          ldab    #$0A            ; 10 attempts with 256 divider ~ 10 seconds
-         stab    $0306
+         stab    ADRWORD
   ; not ready         
-         brclr   $7922,Z,#$10,$03B2 ; Check Flag Timeout
-         jsr     $0372           ; Set tmeout - new attempt
-         decw    $0306
-         bne     $03B2
+NOTRDY:  brclr   $7922,Z,#$10,CHKRDY ; Check Flag Timeout
+         jsr     TIMEOUT         ; Set tmeout - new attempt
+         decw    ADRWORD
+         bne     CHKRDY
          ldab    #$80            ; return error "not ready"
-         bra     $03C6           ; set error abd bail 
+         bra     BAIL            ; set error abd bail 
   ; check ready       
-         ldd     #$70            ; CMD Read Status Register
+CHKRDY:  ldd     #$70            ; CMD Read Status Register
          std     0,X
          ldd     0,X             ; Read Status registr
          andd    #$80            ; check Flag Ready
-         beq     $03B2           ; no,repeat check flag
+         beq     NOTRDY          ; no,repeat check flag
          ldd     0,X             ; else
          andd    #$78            ; Check for other errors in the status register.
-  ; bail
-         rts
+BAIL:    rts
