@@ -4,11 +4,11 @@ START:   JSR     RXBYTE
          CMPB    #$10           ; cmd 10 doesn't have a use yet
          lBEQ    START
          CMPB    #$20           ; cmd 20 is bank erase
-         LBEQ    CMD20
-         CMPB    #$30
-         lBEQ    START
-         CMPB    #$40
-         lBEQ    START
+         LBEQ    CMD_20
+         CMPB    #$30           ; 30 is write flash chunk to mem
+         lBEQ    CMD_30
+         CMPB    #$40           ; 40 is copy from mem to flash
+         lBEQ    CMD_40
          CMPB    #$45           ; bulk memory dump
          lBEQ    CMD_45
          BNE     START
@@ -156,7 +156,7 @@ RDRLOOP: ldab    0,X
          lbra    START
 ADRWORD: NOP                     ; this is the memory word we pull E from
 
-CMD20:   ldab    #$21            ; echo 21 for 20 acknowledge
+CMD_20:  ldab    #$21            ; echo 21 for 20 acknowledge
          jsr     TXBYTE
          jsr     RXBYTE          ; read bank 0x00 - 0x04
          jsr     TXBYTE          ; echo bank
@@ -251,7 +251,7 @@ RD_STOR: jsr     RXBYTE
          ldd     #4000           ; 4000 count delay
          jsr     Delay
          clre                    ; Clear E
-CNTBYTE: NOP
+CNTBYTE: NOP                     ; count of bytes in buffer
 
 CMD_40:  ldab    #41h
          jsr     TXBYTE          ; Send 0x41 acknowledge
@@ -310,7 +310,7 @@ PGMADDR: jsr     RXBYTE          ; Read BANK byte
          jsr     TXBYTE          ; echo it
          ldx     ADRWORD         ; XK = Byte0
                                  ; X = Byte1 : Byte2
-         lde     #0AA55h         ; E = 0x0AA55
+         clre                    ; E = 0x0
          rts
 
 LOADY:   ldab    #0
