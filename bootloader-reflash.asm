@@ -158,16 +158,13 @@ ADRWORD: NOP                     ; this is the memory word we pull E from
 
 CMD_20:  ldab    #$21            ; echo 21 for 20 acknowledge
          jsr     TXBYTE
-         jsr     RXBYTE          ; read bank 0x00 - 0x04
-         jsr     TXBYTE          ; echo bank
          ldab    #$4
          tbxk
-         ldx     #$0             ; 0x40000
-         ldab    #$50
-         jsr     INITGPT         ; init GPT
-         jsr     CSM_RDY         ; check ready
+         jsr     CLRSTAT
+         jsr     RXBYTE          ; which flash bank to erase 0x00 - 0x04
+         jsr     TXBYTE          ; echo bank
          CMPB    #$00
-         beq     BANK0
+         beq     ERASE           ; X already 0x40000
          CMPB    #$01
          beq     BANK1
          CMPB    #$02
@@ -180,7 +177,7 @@ CMD_20:  ldab    #$21            ; echo 21 for 20 acknowledge
 TX_RTN:  jsr     TXBYTE          ; B will contain error or success
          LBRA    START
                                  ; XK:IX = 0x40000
-BANK0:   bra     ERASE           ; jump erase flash
+;BANK0:   bra     ERASE           ; jump erase flash
 
 BANK1:   ldx     #$4000          ; XK:IX = 0x44000
          bra     ERASE           ; jump erase flash
@@ -194,14 +191,40 @@ BANK3:   ldx     #$8000          ; XK:IX = 0x48000
 BANK4:   ldab    #$6
          tbxk
          ldx     #$0000          ; XK:IX = 0x60000
-         bra     ERASE           ; jump erase flash
+;        bra     ERASE           ; jump erase flash
 
-ERASE:   ldd     #$20            ; CMD  Erase
-         std     0,X             ; Block Address
-         ldd     #$0D0           ; CMD Erase Resume/Erase Confirm
+ERASE:   jsr     INITGPT         ; init GPT
+         jsr     TIMEOUT         ; set timeout
+         ldd     #$0F            ; set retries
+         std     ADRWORD         ; store retries
+TMRLOOP: brclr   $7922,Z,#$10,TMRGOOD
+         jsr     TIMEOUT         ; Reset timeout until retries=0
+         decw    ADRWORD         ; 256 divider with 15 retries should be over 10 clock seconds?
+         beq     ER_TMOUT
+      ;   jsr     RD_STAT
+      ;   jsr     TXBYTE
+TMRGOOD: jsr     CLRSTAT
+         ldd     #$20            ; CMD erase
+         std     0,X             ; Address
+         ldd     #$0D0           ; CMD erase confirm
          std     0,X
-         ldab    #$22            ; success
+         jsr     RD_STAT         ; Fetch status
+         andd    #$80            ; check ready bit
+         beq     TMRLOOP         ; bit 8 = 0, busy / not ready
+         jsr     RD_STAT         ; Fetch status
+         andd    #$78            ; various errors
+         bne     TMRLOOP         ; Erase failed, retry
+         ldab    #$22            ; otherwise, we're good
          BRA     TX_RTN
+ER_TMOUT: ldab   #$80            ; 80 time out / fail
+         BRA     TX_RTN
+RD_STAT: ldd     #$70            ; CMD Read Status Register
+         std     0,X
+         ldd     0,X             ; Read Status register
+         rts                     ; Status register in D
+CLRSTAT: ldab    #$50
+         stab    0,X             ; Clear CSM status register
+         rts
 ; Set timeout
 TIMEOUT: ldd     $790A,Z         ; Timer Counter Register (TCNT)
          addd    #$0F424
@@ -211,31 +234,10 @@ TIMEOUT: ldd     $790A,Z         ; Timer Counter Register (TCNT)
          rts
 ; Init GPT
 INITGPT: clr     $791E,Z         ; Timer Control Register 1 (TCTL1)
-         ldab    #$6             ; 256 divider
+         ldab    #6              ; 256 divider
          stab    $7921,Z         ; Timer Mask Register 2 (TMSK2)
          rts
-; Check flash CSM ready
-CSM_RDY: jsr     TIMEOUT         ; set timeout
-         ldab    #$0A            ; 10 attempts with 256 divider ~ 10 seconds
-         stab    ADRWORD
-  ; not ready         
-NOTRDY:  brclr   $7922,Z,#$10,CHKRDY ; Check Flag Timeout
-         jsr     TIMEOUT         ; Set tmeout - new attempt
-         decw    ADRWORD
-         bne     CHKRDY
-         ldab    #$80            ; return error "not ready"
-         bra     BAIL            ; set error abd bail 
-  ; check ready       
-CHKRDY:  ldd     #$70            ; CMD Read Status Register
-         std     0,X
-         ldd     0,X             ; Read Status registr
-         andd    #$80            ; check Flag Ready
-         beq     NOTRDY          ; no,repeat check flag
-         ldd     0,X             ; else
-         andd    #$78            ; Check for other errors in the status register.
-BAIL:    rts
-
-CMD_30:  ldab    #31h
+CMD_30:  ldab    #$31            ; request 0x30, 0xFF: upload 255 bytes
          jsr     TXBYTE          ; Send 0x31 acknowledge
          jsr     RXBYTE          ; tell us how many bytes you're sending
          clra                    ; clear A
@@ -243,57 +245,72 @@ CMD_30:  ldab    #31h
          jsr     TXBYTE          ; echo size byte 
          jsr     LOADY
          clre                    ; Clear E
-RD_STOR: jsr     RXBYTE
-         stab    E,Y             ; This should be E = 0 and Y = 0x00680
+RD_STOR: jsr     RXBYTE          ; Read a byte
+         stab    E,Y             ; Store it starting at E = 0 and Y = 0x00680
          adde    #1
-         cpe     CNTBYTE         ; Counting up to a known size
-         bcs     RD_STOR         ; Not there yet, keep reading
+         decw    CNTBYTE         
+         bne     RD_STOR         ; Not there yet, keep reading
          ldd     #4000           ; 4000 count delay
          jsr     Delay
          clre                    ; Clear E
+         ldab    #$22
+         jsr     TXBYTE          ; Everything's cool
+         lbra    START
 CNTBYTE: NOP                     ; count of bytes in buffer
 
-CMD_40:  ldab    #41h
+CMD_40:  ldab    #$41
          jsr     TXBYTE          ; Send 0x41 acknowledge
          jsr     PGMADDR         ; get the byte count and starting address for write
          jsr     LOADY
-         ldd     #50h            ; clear CSM status register command
-         std     E,X             ; clear CSM status register
-WRITE:   ldd     E,Y             ; load D with word from RAM @ Y + count index
-         cpd     #0FFFFh         ; If it's 0xFFFF...
-         beq     EFFS            ; Skip it. Blank flash word is 0xFFFF
-         ldd     #40h            ; CSM 0x40 program setup command
+         jsr     CLRSTAT
+
+WR_LOOP: jsr     INITGPT         ; init GPT
+         jsr     TIMEOUT         ; set timeout
+         ldd     #$3F            ; set a lot of retries cuz this shit's slow.
+         std     ADRWORD         ; store retries
+WTMRLOOP: brclr   $7922,Z,#$10,WTMRGOOD
+         jsr     TIMEOUT         ; Reset timeout until retries=0
+         decw    ADRWORD         ; 256 divider should be slightly less than a second per retry?
+         beq     TMOUTERR        ; Timeout error
+         jsr     RD_STAT
+         jsr     TXBYTE
+WTMRGOOD: jsr    CLRSTAT
+         ldd     E,Y             ; Read a memory word stored by command 30
+         cpd     #0FFFFh         ; There's an assumption that we only write to an erased flash, which is all 0xFFFF
+         beq     EFFS            ; if it's all 0xFFFF, we don't write it
+         ldd     #$40            ; CSM 0x40 program setup command
          std     E,X             ; Send program setup command
          ldd     E,Y             ; load D with saved flash word at Y + value
          std     E,X             ; Write word from Y+count to flash memory at X+count
-CHKCSM:  ldd     #70h            ; read status register cmd
-         std     E,X             ; Send Read Status Register command
-         ldd     E,X             ; Read the CSM status register
-         andd    #80h            ; check CSM ready bit
-         beq     CHKCSM          ; loop if its not ready (0=busy)
-         ldd     E,X             ; read the CSM status register again
-         andd    #78h            ; Vpp Status, Program Error, Erase Error, Erase-suspend status bits
-         bne     WR_ERR          ; Error flag(s) set, bail
-
+         jsr     RD_STAT         ; Fetch status
+         andd    #$80            ; check ready bit
+         beq     WTMRLOOP        ; bit 8 = 0, busy / not ready
+         jsr     RD_STAT         ; Fetch status
+         andd    #$78            ; various errors
+         bne     WTMRLOOP        ; Write failed, retry
+WRINCLP: adde    #2              ; We're good, move to the next word
+         decw    CNTBYTE         ; maybe i need to dec by two
+         bne     WR_LOOP         ; if it's not zero we still have more to go
+         ldab    #22h            ; 22 seems to generally be "success"
+         jsr     TXBYTE
+         lbra    START
 EFFS:    ldd     #0FFh           ; CSM Read Array command
-         std     E,X             ; Send CSM Read Array 
+         std     E,X             ; Send CSM Read Array
          ldd     E,X             ; Read word from flash @ X+count
          subd    E,Y             ; Subtract Memory Effs from Flash Effs
          bne     WR_ERR          ; If one of those wasn't 0xFFFF, we fucked up.
          ldd     E,X             ; Read the word at X+count from flash (again)
          jsr     TXFLSHWD        ; Echo the two bytes of 0xFF we didn't write
-         adde    #2              ; Inc count by 2 (cuz words)
-         cpe     CNTBYTE         ; compare E to block size
-         blt     WRITE           ; branch if less than zero
-         ldab    #22h            ; 22 seems to generally be "success"
-         jsr     TXBYTE
-         lbra    START           ; branch always to read another command
+         bra     WRINCLP         ; go back into the loop and increment
 
 WR_ERR:  ldd     #0FFFFh         ; load D with value (problematic areas are overwritten with FF)
          std     E,X             ; store D to flash memory at X + value
          ldab    #1              ; load B with value (error writing flash)
          jsr     TXBYTE          ; send it
          lbra    START           ; thank you drive through
+TMOUTERR: ldab    #$80            ; i guess.
+         jsr     TXBYTE
+         lbra    START           ; no dice homey
          
 PGMADDR: jsr     RXBYTE          ; Read BANK byte
          tbxk                    ; XK is now Byte
