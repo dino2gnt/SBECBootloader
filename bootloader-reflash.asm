@@ -160,6 +160,7 @@ CMD_20:  ldab    #$21            ; echo 21 for 20 acknowledge
          jsr     TXBYTE
          ldab    #$4
          tbxk
+         ldx     #$0002
          jsr     CLRSTAT
          jsr     RXBYTE          ; which flash bank to erase 0x00 - 0x04
          jsr     TXBYTE          ; echo bank
@@ -173,24 +174,25 @@ CMD_20:  ldab    #$21            ; echo 21 for 20 acknowledge
          beq     BANK3
          CMPB    #$04
          beq     BANK4
+         lbra    START           ; if no match, bail out
 
 TX_RTN:  jsr     TXBYTE          ; B will contain error or success
+         jsr     CLRSTAT         ; put us back in read-array
          LBRA    START
-                                 ; XK:IX = 0x40000
+                                 ; XK:IX = 0x40002
 ;BANK0:   bra     ERASE           ; jump erase flash
 
-BANK1:   ldx     #$4000          ; XK:IX = 0x44000
+BANK1:   ldx     #$4002          ; XK:IX = 0x44002
          bra     ERASE           ; jump erase flash
 
-BANK2:   ldx     #$6000          ; XK:IX = 0x46000
+BANK2:   ldx     #$6002          ; XK:IX = 0x46002
          bra     ERASE           ; jump erase flash
 
-BANK3:   ldx     #$8000          ; XK:IX = 0x48000
+BANK3:   ldx     #$8002          ; XK:IX = 0x48002
          bra     ERASE           ; jump erase flash
 
-BANK4:   ldab    #$6
-         tbxk
-         ldx     #$0000          ; XK:IX = 0x60000
+BANK4:   ldab    #$6             ; 0x60000 because
+         tbxk                    ; IX is already 0x0002
 ;        bra     ERASE           ; jump erase flash
 
 ERASE:   jsr     INITGPT         ; init GPT
@@ -242,6 +244,7 @@ CMD_30:  ldab    #$31            ; request 0x30, 0xFF: upload 255 bytes
          jsr     RXBYTE          ; tell us how many bytes you're sending
          clra                    ; clear A
          std     CNTBYTE         ; D = A:B, A = 00000000, store low byte B in RAM
+         incw    CNTBYTE         ; because I am a terrible coder.
          jsr     TXBYTE          ; echo size byte 
          jsr     LOADY
          clre                    ; Clear E
@@ -250,8 +253,6 @@ RD_STOR: jsr     RXBYTE          ; Read a byte
          adde    #1
          decw    CNTBYTE         
          bne     RD_STOR         ; Not there yet, keep reading
-         ldd     #4000           ; 4000 count delay
-         jsr     Delay
          clre                    ; Clear E
          ldab    #$22
          jsr     TXBYTE          ; Everything's cool
@@ -266,15 +267,18 @@ CMD_40:  ldab    #$41
 
 WR_LOOP: jsr     INITGPT         ; init GPT
          jsr     TIMEOUT         ; set timeout
-         ldd     #$3F            ; set a lot of retries cuz this shit's slow.
+         ldd     #$1F            ; set a lot of retries cuz i'm slow.
          std     ADRWORD         ; store retries
 WTMRLOOP: brclr   $7922,Z,#$10,WTMRGOOD
          jsr     TIMEOUT         ; Reset timeout until retries=0
          decw    ADRWORD         ; 256 divider should be slightly less than a second per retry?
          beq     TMOUTERR        ; Timeout error
-         jsr     RD_STAT
-         jsr     TXBYTE
+;         jsr     RD_STAT
+;         jsr     TXBYTE
 WTMRGOOD: jsr    CLRSTAT
+         jsr     RD_STAT         ; Fetch status
+         andd    #$80            ; check ready bit
+         beq     WTMRLOOP        ; bit 8 = 0, busy / not ready
          ldd     E,Y             ; Read a memory word stored by command 30
          cpd     #0FFFFh         ; There's an assumption that we only write to an erased flash, which is all 0xFFFF
          beq     EFFS            ; if it's all 0xFFFF, we don't write it
@@ -283,13 +287,10 @@ WTMRGOOD: jsr    CLRSTAT
          ldd     E,Y             ; load D with saved flash word at Y + value
          std     E,X             ; Write word from Y+count to flash memory at X+count
          jsr     RD_STAT         ; Fetch status
-         andd    #$80            ; check ready bit
-         beq     WTMRLOOP        ; bit 8 = 0, busy / not ready
-         jsr     RD_STAT         ; Fetch status
-         andd    #$78            ; various errors
+         andd    #$98            ; vpp low & program word errors
          bne     WTMRLOOP        ; Write failed, retry
 WRINCLP: adde    #2              ; We're good, move to the next word
-         decw    CNTBYTE         ; maybe i need to dec by two
+         cpe     CNTBYTE         ; if E - $count == 0
          bne     WR_LOOP         ; if it's not zero we still have more to go
          ldab    #22h            ; 22 seems to generally be "success"
          jsr     TXBYTE
@@ -325,6 +326,7 @@ PGMADDR: jsr     RXBYTE          ; Read BANK byte
          clra                    ; clear A
          std     CNTBYTE         ; D = A:B, A = 00000000, store low byte B in RAM
          jsr     TXBYTE          ; echo it
+         incw    CNTBYTE         ; Because i'm a hack
          ldx     ADRWORD         ; XK = Byte0
                                  ; X = Byte1 : Byte2
          clre                    ; E = 0x0
@@ -335,7 +337,7 @@ LOADY:   ldab    #0
          ldy     #680h           ; YK:IY = 0x00680 RAM Buffer addr CHANGE ME
          RTS
 
-TXFLSHWD: stab    RDR_X          ; store B to B
+TXFLSHWD: stab    RDR_X          ; store B to word
          tab                     ; A -> B
          jsr     TXBYTE          ; Echo B
          ldd     #140h           ; 320 count of delay
