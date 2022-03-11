@@ -159,11 +159,8 @@ ADRWORD: NOP                     ; this is the memory word we pull E from
 CMD_20:  ldab    #$21            ; echo 21 for 20 acknowledge
          jsr     TXBYTE
          jsr     RXBYTE          ; read memorybank for xk
-         tba
-         tbxk                    ; this is stupid
-         tab
-         jsr     TXBYTE          ; RX -> b -> A, b -> xk, a -> b, echo B.
-         jsr     TXBYTE
+         tbxk                    ; B -> XK
+         jsr     TXBYTE 
          jsr     RXBYTE          ; read address high byte
          stab    ADRWORD         
          jsr     TXBYTE
@@ -179,10 +176,10 @@ ERLOOP:  jsr     INITGPT         ; init GPT
          jsr     TIMEOUT         ; set timeout
          ldd     #$1F            ; set retries
          std     CNTBYTE         ; store retries
-         jsr     CLRSTAT
 
 TMRLOOP: brclr   $7922,Z,#$10,TMRGOOD
          jsr     TIMEOUT         ; Reset timeout until retries=0
+         jsr     CLRSTAT
          decw    CNTBYTE         ; 256 divider with 15 retries should be over 10 clock seconds?
          beq     ER_TMOUT
 
@@ -260,12 +257,11 @@ WR_LOOP: jsr     INITGPT         ; init GPT
          std     ADRWORD         ; store retries
 WTMRLOOP: brclr   $7922,Z,#$10,WTMRGOOD
          jsr     TIMEOUT         ; Reset timeout until retries=0
+         jsr     CLRSTAT
          decw    ADRWORD         ; 256 divider should be slightly less than a second per retry?
          beq     TMOUTERR        ; Timeout error
-;         jsr     RD_STAT
-;         jsr     TXBYTE
-WTMRGOOD: jsr    CLRSTAT
-         jsr     RD_STAT         ; Fetch status
+
+WTMRGOOD: jsr     RD_STAT         ; Fetch status
          andd    #$80            ; check ready bit
          beq     WTMRLOOP        ; bit 8 = 0, busy / not ready
          ldd     E,Y             ; Read a memory word stored by command 30
@@ -278,14 +274,14 @@ WTMRGOOD: jsr    CLRSTAT
          jsr     RD_STAT         ; Fetch status
          andd    #$78            ; vpp low & program word errors
          bne     WTMRLOOP        ; Write failed, retry
+
 WRINCLP: adde    #2              ; We're good, move to the next word
          cpe     CNTBYTE         ; if E - $count == 0
          bne     WR_LOOP         ; if it's not zero we still have more to go
          ldab    #22h            ; 22 seems to generally be "success"
-         jsr     TXBYTE
-         lbra    START
-EFFS:    ldd     #0FFh           ; CSM Read Array command
-         std     E,X             ; Send CSM Read Array
+         bra     ECHOXIT
+
+EFFS:    jsr     RDARRAY 
          ldd     E,X             ; Read word from flash @ X+count
          subd    E,Y             ; Subtract Memory Effs from Flash Effs
          bne     WR_ERR          ; If one of those wasn't 0xFFFF, we fucked up.
@@ -293,14 +289,17 @@ EFFS:    ldd     #0FFh           ; CSM Read Array command
          jsr     TXFLSHWD        ; Echo the two bytes of 0xFF we didn't write
          bra     WRINCLP         ; go back into the loop and increment
 
-WR_ERR:  ldd     #0FFFFh         ; load D with value (problematic areas are overwritten with FF)
-         std     E,X             ; store D to flash memory at X + value
+WR_ERR:  jsr     RDARRAY
          ldab    #1              ; load B with value (error writing flash)
-         jsr     TXBYTE          ; send it
-         lbra    START           ; thank you drive through
+         bra     ECHOXIT
+
 TMOUTERR: ldab    #$80            ; i guess.
-         jsr     TXBYTE
+ECHOXIT: jsr     TXBYTE
          lbra    START           ; no dice homey
+
+RDARRAY: ldd     #0FFh           ; CSM Read Array command
+         std     E,X             ; Send CSM Read Array
+         rts
          
 PGMADDR: jsr     RXBYTE          ; Read BANK byte
          tbxk                    ; XK is now Byte
