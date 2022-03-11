@@ -9,7 +9,7 @@
   * Request: ````20 0X XX XX````
      * 0X XX XX can be any 20 bit address inside the target bank, e.g. Bank 0 is ````04 00 00````
   * Response: ````21 0X XX XX````
-     * After the response, we enter a timer-loop that counts down approximately 15 seconds, attempting the delete command each iteration until time runs out or it succeeds.  SCI RX must be +20V for the delete to succeed.
+     * After the response, we enter a timer-loop that counts down approximately 15 seconds, attempting the block-erase command each iteration until time runs out or it succeeds.  SCI RX must be +20V for the delete to succeed.
     * Success: ````22````
     * Failure: The content of the flash chip's Command State Register containing error bit values
 
