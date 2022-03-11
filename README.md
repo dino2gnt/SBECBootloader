@@ -32,18 +32,18 @@
        * Bytes not echoed
        * SCI RX does NOT have to be +20V
    * Success: ````22```` is echoed when XX bytes have been received
-   * **Note**: The RAM buffer size is limited to 255 bytes because it is read from an 8 bit value. This may be revised / increased later, there's plenty of RAM.
+   * **Note**: The RAM buffer size is limited to 256 bytes because it is read from an 8 bit value. This may be revised / increased later, there's plenty of RAM.
 
 #### Write to flash:
    * Request: ````40 0X XX XX YY````
-       * XX XX XX is the starting address in flash memory for the write
+       * 0X XX XX is the starting address in flash memory for the write
        * YY is the count of bytes to write from the RAM buffer to flash
    * Response: ````41 0X XX XX YY````
       * After sending the response, we enter a timer-loop that counts down approximately 15 seconds, attempting a write each iteration until time runs out or it succeeds. SCI RX must be +20V for the write to succeed.
    * Success: ````22```` is echoed when YY bytes have been successfully written to flash memory
-    * Failure:
-       * Write error: ````0x01````
-       * Timeout: ````0x80````
+   * Failure:
+      * Write error: ````0x01````
+      * Timeout: ````0x80````
 * **Note**:The expectation is a pattern of ````30 YY <bytes>```` to stage data to RAM, followed by a ````40 XX XX XX YY```` and a switch to +20V on SCI RX (switched off on 22/success) to write staged data to flash, followed by another 30, then 40, etc, etc.
 
 ### Bulk Read:
