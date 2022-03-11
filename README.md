@@ -47,6 +47,7 @@
 * **Note**:The expectation is a pattern of ````30 YY <bytes>```` to stage data to RAM, followed by a ````40 XX XX XX YY```` and a switch to +20V on SCI RX (switched off on 22/success) to write staged data to flash, followed by another 30, then 40, etc, etc.
 
 ### Bulk Read:
+---------
    * Request: ````45 0X XX XX YY YY````
        * 0X XX XX is a 20 bit address start address for the read
        * YY YY is a 16 bit count of bytes to return
