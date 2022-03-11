@@ -158,75 +158,64 @@ ADRWORD: NOP                     ; this is the memory word we pull E from
 
 CMD_20:  ldab    #$21            ; echo 21 for 20 acknowledge
          jsr     TXBYTE
-         ldab    #$4
-         tbxk
-         ldx     #$0002
-         jsr     CLRSTAT
-         jsr     RXBYTE          ; which flash bank to erase 0x00 - 0x04
-         jsr     TXBYTE          ; echo bank
-         CMPB    #$00
-         beq     ERASE           ; X already 0x40000
-         CMPB    #$01
-         beq     BANK1
-         CMPB    #$02
-         beq     BANK2
-         CMPB    #$03
-         beq     BANK3
-         CMPB    #$04
-         beq     BANK4
-         lbra    START           ; if no match, bail out
-
-TX_RTN:  jsr     TXBYTE          ; B will contain error or success
-         jsr     CLRSTAT         ; put us back in read-array
-         LBRA    START
-                                 ; XK:IX = 0x40002
-;BANK0:   bra     ERASE           ; jump erase flash
-
-BANK1:   ldx     #$4002          ; XK:IX = 0x44002
-         bra     ERASE           ; jump erase flash
-
-BANK2:   ldx     #$6002          ; XK:IX = 0x46002
-         bra     ERASE           ; jump erase flash
-
-BANK3:   ldx     #$8002          ; XK:IX = 0x48002
-         bra     ERASE           ; jump erase flash
-
-BANK4:   ldab    #$6             ; 0x60000 because
-         tbxk                    ; IX is already 0x0002
-;        bra     ERASE           ; jump erase flash
-
-ERASE:   jsr     INITGPT         ; init GPT
+         jsr     RXBYTE          ; read memorybank for xk
+         tba
+         tbxk                    ; this is stupid
+         tab
+         jsr     TXBYTE          ; RX -> b -> A, b -> xk, a -> b, echo B.
+         jsr     TXBYTE
+         jsr     RXBYTE          ; read address high byte
+         stab    ADRWORD         
+         jsr     TXBYTE
+         jsr     RXBYTE          ; read address low byte
+         stab    ADRWORD+1       ; XK:IX is the address in the flash bank to erase  
+         jsr     TXBYTE
+         ldx     ADRWORD         ; 0x40000 bank 0
+                                 ; 0x44000 bank 1
+                                 ; 0x46000 bank 2
+                                 ; 0x48000 bank 3
+                                 ; 0x60000 bank 4
+ERLOOP:  jsr     INITGPT         ; init GPT
          jsr     TIMEOUT         ; set timeout
-         ldd     #$0F            ; set retries
-         std     ADRWORD         ; store retries
+         ldd     #$1F            ; set retries
+         std     CNTBYTE         ; store retries
+         jsr     CLRSTAT
+
 TMRLOOP: brclr   $7922,Z,#$10,TMRGOOD
          jsr     TIMEOUT         ; Reset timeout until retries=0
-         decw    ADRWORD         ; 256 divider with 15 retries should be over 10 clock seconds?
+         decw    CNTBYTE         ; 256 divider with 15 retries should be over 10 clock seconds?
          beq     ER_TMOUT
-      ;   jsr     RD_STAT
-      ;   jsr     TXBYTE
-TMRGOOD: jsr     CLRSTAT
-         ldd     #$20            ; CMD erase
-         std     0,X             ; Address
-         ldd     #$0D0           ; CMD erase confirm
-         std     0,X
+
+TMRGOOD: jsr     ERASE           ; if WSM is ready, send erase commands
          jsr     RD_STAT         ; Fetch status
          andd    #$80            ; check ready bit
          beq     TMRLOOP         ; bit 8 = 0, busy / not ready
          jsr     RD_STAT         ; Fetch status
-         andd    #$78            ; various errors
+         andd    #$78            ; Erase suspended / Vpp range error &tc
          bne     TMRLOOP         ; Erase failed, retry
-         ldab    #$22            ; otherwise, we're good
-         BRA     TX_RTN
-ER_TMOUT: ldab   #$80            ; 80 time out / fail
-         BRA     TX_RTN
+         ldab    #$22            ; no errors, we're good?
+         bra     TX_RTN
+
+ER_TMOUT: jsr     RD_STAT        ; return failure status code
+TX_RTN:  jsr     TXBYTE          ; B will contain error or success
+         jsr     CLRSTAT         ; put us back in read-array
+         lbra    START           ; if no match, bail out
+
 RD_STAT: ldd     #$70            ; CMD Read Status Register
          std     0,X
          ldd     0,X             ; Read Status register
          rts                     ; Status register in D
-CLRSTAT: ldab    #$50
-         stab    0,X             ; Clear CSM status register
+
+CLRSTAT: ldd     #$50
+         std     0,X             ; Clear CSM status register
          rts
+
+ERASE:   ldd     #$20            ; CMD erase
+         std     0,X             ; Bank address
+         ldd     #$D0            ; CMD erase confirm
+         std     0,X
+         rts
+
 ; Set timeout
 TIMEOUT: ldd     $790A,Z         ; Timer Counter Register (TCNT)
          addd    #$0F424
@@ -287,7 +276,7 @@ WTMRGOOD: jsr    CLRSTAT
          ldd     E,Y             ; load D with saved flash word at Y + value
          std     E,X             ; Write word from Y+count to flash memory at X+count
          jsr     RD_STAT         ; Fetch status
-         andd    #$98            ; vpp low & program word errors
+         andd    #$78            ; vpp low & program word errors
          bne     WTMRLOOP        ; Write failed, retry
 WRINCLP: adde    #2              ; We're good, move to the next word
          cpe     CNTBYTE         ; if E - $count == 0
