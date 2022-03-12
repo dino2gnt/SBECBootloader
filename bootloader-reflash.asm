@@ -35,8 +35,13 @@ SETUP:   ORP     #$00E0
          LDZ     #$8000
          LDAB    #$00
          TBSK
-         LDS     #$07F6
-         CLRB
+         ldab    $7A02,Z        ; SIMTR register
+         cmpb    #$83           ; Z2 MCU with 2K RAM?
+         beq     SMOLSTAK
+         LDS     #$0FF6
+         bra     SKIPLDS
+SMOLSTAK: LDS     #$07F6
+SKIPLDS: CLRB
          TBEK
          TBYK
          LDAB    #$04
@@ -227,13 +232,7 @@ INITGPT: clr     $791E,Z         ; Timer Control Register 1 (TCTL1)
          rts
 CMD_30:  ldab    #$31            ; request 0x30, 0xFF: upload 255 bytes
          jsr     TXBYTE          ; Send 0x31 acknowledge
-         jsr     RXBYTE          ; tell us how many bytes you're sending
-         stab    CNTBYTE         ; size high bye
-         jsr     TXBYTE
-         jsr     RXBYTE          ; get low byte
-         stab    CNTBYTE+1
-         incw    CNTBYTE         ; because I am a terrible coder.
-         jsr     TXBYTE 
+         jsr     RDCOUNT         ; broke this out into a sub to reduce size
          jsr     LOADY
          clre                    ; Clear E
 RD_STOR: jsr     RXBYTE          ; Read a byte
@@ -246,6 +245,15 @@ RD_STOR: jsr     RXBYTE          ; Read a byte
          jsr     TXBYTE          ; Everything's cool
          lbra    START
 CNTBYTE: NOP                     ; count of bytes in buffer
+
+RDCOUNT: jsr     RXBYTE          ; tell us how many bytes you're sending
+         stab    CNTBYTE         ; size high bye
+         jsr     TXBYTE
+         jsr     RXBYTE          ; get low byte
+         stab    CNTBYTE+1
+         jsr     TXBYTE
+         incw    CNTBYTE         ; because I am a terrible coder.
+         rts
 
 CMD_40:  ldab    #$41
          jsr     TXBYTE          ; Send 0x41 acknowledge
@@ -312,13 +320,7 @@ PGMADDR: jsr     RXBYTE          ; Read BANK byte
          jsr     RXBYTE          ; read the next byte
          stab    ADRWORD+1       ; Store it to RAM
          jsr     TXBYTE          ; echo it
-         jsr     RXBYTE          ; read high byte
-         stab    CNTBYTE         ; high byte
-         jsr     TXBYTE          ; echo it
-         jsr     RXBYTE          ; read low byte
-         stab    CNTBYTE+1       ; low byte
-         jsr     TXBYTE          ; echo it
-         incw    CNTBYTE         ; Because i'm a hack
+         jsr     RDCOUNT         ;  broke this out into a sub to reduce size
          ldx     ADRWORD         ; XK = Byte0
                                  ; X = Byte1 : Byte2
          clre                    ; E = 0x0
