@@ -25,26 +25,26 @@
 ---------
 
 #### Write to buffer:
-  * Request: ````30 YY````
-         * YY is the count of bytes to write to RAM buffer, zero indexed, ````0x00```` to ````0xFF````. Writes initially populate a RAM buffer of max 256 bytes starting at ````0x00680````
-    * Response: ````31 YY````
-       * Follow the response with XX bytes of data to be written to RAM buffer
+  * Request: ````30 0Y YY````
+         * YY is the count of bytes to write to RAM buffer, zero indexed, ````0x0000```` to ````0xFFFF````. Writes from Command 30 populate a RAM buffer starting at ````0x00540````.
+    * Response: ````31 0Y YY````
+       * Follow the response with ````0x0YYY```` bytes of data to be written to RAM buffer
        * Bytes not echoed
        * SCI RX does NOT have to be +20V
-   * Success: ````22```` is echoed when XX bytes have been received
-   * **Note**: The RAM buffer size is limited to 256 bytes because it is read from an 8 bit value. This may be revised / increased later, there's plenty of RAM.
+   * Success: ````22```` is echoed when YYYY bytes have been received.
+   * **Note**: The RAM buffer size is limited to the amount of available RAM. I don't recommend greater than ````0x03FF```` (1K) unless you know what you're doing.  There is no range check and we will happily try to write off the end of RAM and crash if you ask us to.
 
 #### Write to flash:
-   * Request: ````40 0X XX XX YY````
+   * Request: ````40 0X XX XX 0Y YY````
        * 0X XX XX is the starting address in flash memory for the write
-       * YY is the count of bytes to write from the RAM buffer to flash
-   * Response: ````41 0X XX XX YY````
+       * YYYY is the count of bytes to write from the RAM buffer to flash anbd should match the YYYY used to stage data to RAM.
+   * Response: ````41 0X XX XX YY YY````
       * After sending the response, we enter a timer-loop that counts down approximately 15 seconds, attempting a write each iteration until time runs out or it succeeds. SCI RX must be +20V for the write to succeed.
    * Success: ````22```` is echoed when YY bytes have been successfully written to flash memory
    * Failure:
       * Write error: ````0x01````
       * Timeout: ````0x80````
-* **Note**:The expectation is a pattern of ````30 YY <bytes>```` to stage data to RAM, followed by a ````40 XX XX XX YY```` and a switch to +20V on SCI RX (switched off on 22/success) to write staged data to flash, followed by another 30, then 40, etc, etc.
+* **Note**:The expectation is a pattern of ````30 0Y YY <bytes>```` to stage data to RAM, followed by a ````40 0X XX XX 0Y YY```` and a switch to +20V on SCI RX (switched off on 22/success) to write staged data to flash, followed by another 30, then 40, etc, etc.
 
 ### Bulk Read:
 ---------

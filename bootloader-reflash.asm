@@ -228,10 +228,12 @@ INITGPT: clr     $791E,Z         ; Timer Control Register 1 (TCTL1)
 CMD_30:  ldab    #$31            ; request 0x30, 0xFF: upload 255 bytes
          jsr     TXBYTE          ; Send 0x31 acknowledge
          jsr     RXBYTE          ; tell us how many bytes you're sending
-         clra                    ; clear A
-         std     CNTBYTE         ; D = A:B, A = 00000000, store low byte B in RAM
+         stab    CNTBYTE         ; size high bye
+         jsr     TXBYTE
+         jsr     RXBYTE          ; get low byte
+         stab    CNTBYTE+1
          incw    CNTBYTE         ; because I am a terrible coder.
-         jsr     TXBYTE          ; echo size byte 
+         jsr     TXBYTE 
          jsr     LOADY
          clre                    ; Clear E
 RD_STOR: jsr     RXBYTE          ; Read a byte
@@ -278,7 +280,7 @@ WTMRGOOD: jsr     RD_STAT         ; Fetch status
 WRINCLP: adde    #2              ; We're good, move to the next word
          cpe     CNTBYTE         ; if E - $count == 0
          bne     WR_LOOP         ; if it's not zero we still have more to go
-         ldab    #22h            ; 22 seems to generally be "success"
+         ldab    #$22            ; 22 seems to generally be "success"
          bra     ECHOXIT
 
 EFFS:    jsr     RDARRAY 
@@ -310,9 +312,11 @@ PGMADDR: jsr     RXBYTE          ; Read BANK byte
          jsr     RXBYTE          ; read the next byte
          stab    ADRWORD+1       ; Store it to RAM
          jsr     TXBYTE          ; echo it
-         jsr     RXBYTE          ; read another byte
-         clra                    ; clear A
-         std     CNTBYTE         ; D = A:B, A = 00000000, store low byte B in RAM
+         jsr     RXBYTE          ; read high byte
+         stab    CNTBYTE         ; high byte
+         jsr     TXBYTE          ; echo it
+         jsr     RXBYTE          ; read low byte
+         stab    CNTBYTE+1       ; low byte
          jsr     TXBYTE          ; echo it
          incw    CNTBYTE         ; Because i'm a hack
          ldx     ADRWORD         ; XK = Byte0
@@ -322,14 +326,12 @@ PGMADDR: jsr     RXBYTE          ; Read BANK byte
 
 LOADY:   ldab    #0
          tbyk    
-         ldy     #680h           ; YK:IY = 0x00680 RAM Buffer addr CHANGE ME
+         ldy     #540h           ; YK:IY = 0x00540 RAM Buffer addr CHANGE ME
          RTS
 
 TXFLSHWD: stab    RDR_X          ; store B to word
          tab                     ; A -> B
          jsr     TXBYTE          ; Echo B
-         ldd     #140h           ; 320 count of delay
-         jsr     DELAY            
          ldab    RDR_X           ; load B with memory content
          jsr     TXBYTE          ; write SCI byte from B
          rts 
