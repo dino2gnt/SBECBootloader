@@ -2,7 +2,7 @@
          LBRA    SETUP
 START:   JSR     RXBYTE
          CMPB    #$10           ; cmd 10 doesn't have a use yet
-         lBEQ    START
+         BEQ     START
          CMPB    #$20           ; cmd 20 is bank erase
          LBEQ    CMD_20
          CMPB    #$30           ; 30 is write flash chunk to mem
@@ -35,18 +35,14 @@ SETUP:   ORP     #$00E0
          LDZ     #$8000
          LDAB    #$00
          TBSK
+         LDS     #$07F6         ; set the stack pointer near 2KB
          ldab    $7A02,Z        ; SIMTR register
          cmpb    #$83           ; Z2 MCU with 2K RAM?
-         beq     SMOLSTAK
-         LDS     #$0FF6
-         bra     SKIPLDS
-SMOLSTAK: LDS     #$07F6
+         beq     SKIPLDS        ; If SIMTR == 83, we're limited to 2KB
+         LDS     #$0FF6         ; If not, set the stack pointer near 4KB
 SKIPLDS: CLRB
          TBEK
          TBYK
-         LDAB    #$04
-         TBXK
-         LDX     #$8000
          LDD     #$0148
          STD     $7A00,Z
          BCLR    $7A21,Z,#$80
