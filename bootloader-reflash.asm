@@ -226,7 +226,7 @@ PGMADDR: jsr     RXBYTE          ; Read BANK byte
 
 LOADY:   ldab    #0
          tbyk                    ; YK:IY = 0x00396
-         ldy      #$396          ; NOTE this is the memory location for the start of SETUP and will change
+         ldy      #SETUP          ; NOTE this is the memory location for the start of SETUP and will change
          rts                     ; if the assembly changes. We overwrite our init code as RAM buffer. I couldn't figure 
                                  ; how to do this with a label :(
 TXFLSHWD: stab    RDR_X          ; store B to word
