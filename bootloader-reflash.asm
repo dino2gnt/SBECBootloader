@@ -1,5 +1,5 @@
          ORG     $0100
-         LBRA    SETUP
+         LBRA    SETUP          ; initialization is at the very end, so it can be run once and overwritten
 START:   JSR     RXBYTE
          CMPB    #$10           ; cmd 10 doesn't have a use yet
          BEQ     START
@@ -29,104 +29,6 @@ DELAY:   SUBD    #$0001         ; Delay function
          BNE     DELAY
          RTS
 RDR_X:   NOP                    ; Reader X byte
-SETUP:   ORP     #$00E0
-         LDAB    #$0F
-         TBZK
-         LDZ     #$8000
-         LDAB    #$00
-         TBSK
-         LDS     #$07F6         ; set the stack pointer near 2KB
-         ldab    $7A02,Z        ; SIMTR register
-         cmpb    #$83           ; Z2 MCU with 2K RAM?
-         beq     SKIPLDS        ; If SIMTR == 83, we're limited to 2KB
-         LDS     #$0FF6         ; If not, set the stack pointer near 4KB
-SKIPLDS: CLRB
-         TBEK
-         TBYK
-         LDD     #$0148
-         STD     $7A00,Z
-         BCLR    $7A21,Z,#$80
-         LDD     #$00CF
-         STD     $7A44,Z
-         LDD     #$0405
-         STD     $7A48,Z
-         STD     $7A4C,Z
-         LDD     #$68F0
-         STD     $7A4A,Z
-         LDD     #$70F0
-         STD     $7A4E,Z
-         LDD     #$FF88
-         STD     $7A54,Z
-         LDD     #$7830
-         STD     $7A56,Z
-         LDD     #$F881
-         STD     $0814,Z
-         LDD     $0812,Z
-         ORD     #$0001
-         STD     $0812,Z
-         LDD     #$0000
-         STD     $0818,Z
-         BSETW   $0806,Z,#$FFFF
-         BSETW   $0808,Z,#$03FF
-         CLRD
-         LDE     #$0824
-         STD     E,Z
-LOOP1:   ADDE    #$04
-         CPE     #$0838
-         BLS     LOOP1
-         CLR     $7920,Z
-         BCLRW   $0860,Z,#$2000
-         JSR     QSPI
-         LDAB    #$22
-         JSR     TXBYTE
-         JMP     START
-QSPI:    LDD     #$4088
-         STD     $7C00,Z
-         LDAA    #$06
-         STAA    $7C04,Z
-         LDAA    #$FE
-         STAA    $7C05,Z
-         LDAA    #$33
-         STAA    $7C16,Z
-         LDAA    #$F8
-         STAA    $7C15,Z
-         LDAA    #$FE
-         STAA    $7C17,Z
-         LDD     #$8108
-         STD     $7C18,Z
-         LDD     #$1000
-         STD     $7C1A,Z
-         LDD     #$0000
-         STD     $7C1C,Z
-         LDAA    #$00
-         STAA    $7C1E,Z
-         LDE     #$4242
-         STE     $7D41,Z
-         LDE     #$0202
-         STE     $7D43,Z
-         LDE     #$C202
-         STE     $7D45,Z
-         LDE     #$C242
-         STE     $7D48,Z
-         LDD     #$0100
-         STD     $7D24,Z
-         LDD     #$0202
-         STD     $7C1C,Z
-         JSR     START_SPI
-         RTS
-START_SPI: BCLR    $7C1F,Z,#$80
-         BSET    $7C1A,Z,#$80
-         CLRA
-BUSYLOOP: DECA
-         BEQ     SET_V
-         BRCLR   $7C1F,Z,#$80,BUSYLOOP
-         BCLR    $7C1F,Z,#$80
-         TSTA
-         BRA     SPI_RTN
-SET_V:   ORP     #$0100
-         TPA
-         LDAB    #$A5
-SPI_RTN: RTS
 ;  Command 45 / Memory dump:
 CMD_45:  ldab    #$46            ; sequence will be:
                                  ; 0x45 0x07 0xFF 0xBF 0x00 0x40 request
@@ -323,13 +225,111 @@ PGMADDR: jsr     RXBYTE          ; Read BANK byte
          rts
 
 LOADY:   ldab    #0
-         tbyk    
-         ldy     #540h           ; YK:IY = 0x00540 RAM Buffer addr CHANGE ME
-         RTS
-
+         tbyk                    ; YK:IY = 0x00396
+         ldy      #$396          ; NOTE this is the memory location for the start of SETUP and will change
+         rts                     ; if the assembly changes. We overwrite our init code as RAM buffer. I couldn't figure 
+                                 ; how to do this with a label :(
 TXFLSHWD: stab    RDR_X          ; store B to word
          tab                     ; A -> B
          jsr     TXBYTE          ; Echo B
          ldab    RDR_X           ; load B with memory content
          jsr     TXBYTE          ; write SCI byte from B
          rts 
+
+SETUP:   ORP     #$00E0         
+         LDAB    #$0F
+         TBZK
+         LDZ     #$8000          ; ZK:IZ = 0xF8000
+         LDAB    #$00
+         TBSK                    ; SK = 0x00 
+         LDS     #$07F6          ; set the stack pointer near 2KB 0x007F6
+         ldab    $7A02,Z         ; SIMTR register
+         cmpb    #$83            ; Z2 MCU with 2K RAM?
+         beq     SKIPLDS         ; If SIMTR == 83, we're limited to 2KB
+         LDS     #$0FF6          ; If not, set the stack pointer near 4KB 0x00FF6
+SKIPLDS: CLRB
+         TBEK                    ; EK = 0x00
+         TBYK                    ; YK = 0x00
+         LDD     #$0148          ; I had really good notes written on all the Chip Select register values
+         STD     $7A00,Z         ; being assigned here to bring up the flash on 0x40000
+         BCLR    $7A21,Z,#$80    ; but lost them in an IDA crash ;-/
+         LDD     #$00CF
+         STD     $7A44,Z
+         LDD     #$0405
+         STD     $7A48,Z
+         STD     $7A4C,Z
+         LDD     #$68F0
+         STD     $7A4A,Z
+         LDD     #$70F0
+         STD     $7A4E,Z
+         LDD     #$FF88
+         STD     $7A54,Z
+         LDD     #$7830
+         STD     $7A56,Z
+         LDD     #$F881
+         STD     $0814,Z
+         LDD     $0812,Z
+         ORD     #$0001
+         STD     $0812,Z
+         LDD     #$0000
+         STD     $0818,Z
+         BSETW   $0806,Z,#$FFFF
+         BSETW   $0808,Z,#$03FF
+         CLRD
+         LDE     #$0824
+         STD     E,Z
+LOOP1:   ADDE    #$04
+         CPE     #$0838
+         BLS     LOOP1
+         CLR     $7920,Z
+         BCLRW   $0860,Z,#$2000
+         JSR     QSPI
+         LDAB    #$22           ; Init succeeded 
+         JSR     TXBYTE
+         LBRA    START
+QSPI:    LDD     #$4088
+         STD     $7C00,Z
+         LDAA    #$06
+         STAA    $7C04,Z
+         LDAA    #$FE
+         STAA    $7C05,Z
+         LDAA    #$33
+         STAA    $7C16,Z
+         LDAA    #$F8
+         STAA    $7C15,Z
+         LDAA    #$FE
+         STAA    $7C17,Z
+         LDD     #$8108
+         STD     $7C18,Z
+         LDD     #$1000
+         STD     $7C1A,Z
+         LDD     #$0000
+         STD     $7C1C,Z
+         LDAA    #$00
+         STAA    $7C1E,Z
+         LDE     #$4242
+         STE     $7D41,Z
+         LDE     #$0202
+         STE     $7D43,Z
+         LDE     #$C202
+         STE     $7D45,Z
+         LDE     #$C242
+         STE     $7D48,Z
+         LDD     #$0100
+         STD     $7D24,Z
+         LDD     #$0202
+         STD     $7C1C,Z
+         JSR     START_SPI
+         RTS
+START_SPI: BCLR  $7C1F,Z,#$80
+         BSET    $7C1A,Z,#$80
+         CLRA
+BUSYLOOP: DECA
+         BEQ     SET_V
+         BRCLR   $7C1F,Z,#$80,BUSYLOOP
+         BCLR    $7C1F,Z,#$80
+         TSTA
+         BRA     SPI_RTN
+SET_V:   ORP     #$0100
+         TPA
+SPI_RTN: RTS
