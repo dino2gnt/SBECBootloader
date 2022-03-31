@@ -1,17 +1,22 @@
          ORG     $0100
          LBRA    SETUP          ; initialization is at the very end, so it can be run once and overwritten
-START:   JSR     RXBYTE
-         CMPB    #$10           ; cmd 10 doesn't have a use yet
-         BEQ     START
-         CMPB    #$20           ; cmd 20 is bank erase
-         LBEQ    CMD_20
-         CMPB    #$30           ; 30 is write flash chunk to mem
-         lBEQ    CMD_30
-         CMPB    #$40           ; 40 is copy from mem to flash
-         lBEQ    CMD_40
-         CMPB    #$45           ; bulk memory dump
-         lBEQ    CMD_45
-         BNE     START
+START:   jsr     RXBYTE
+         cmpb    #$10           ; cmd 10 will echo 11.
+         beq     CMD_10
+         cmpb    #$20           ; cmd 20 is bank erase
+         lbeq    CMD_20
+         cmpb    #$30           ; cmd 30 is write flash chunk to mem
+         lbeq    CMD_30
+         cmpb    #$40           ; cmd 40 is copy from mem to flash
+         lbeq    CMD_40
+         cmpb    #$45           ; cmd 45 is bulk memory dump
+         lbeq    CMD_45
+         bne     START
+
+CMD_10:  ldab    #$11
+         jsr     TXBYTE
+         beq     START
+
 TXBYTE:  LDAA    $7C0C,Z        ; TX function
          ANDA    #$01
          BEQ     TXBYTE
@@ -136,7 +141,7 @@ CMD_30:  ldab    #$31            ; request 0x30, 0xFF: upload 255 bytes
 RD_STOR: jsr     RXBYTE          ; Read a byte
          stab    E,Y             ; Store it starting at E = 0 and Y = 0x00680
          adde    #1
-         decw    CNTBYTE         
+         cpe     CNTBYTE         ; if E - CNTBYTE == 0
          bne     RD_STOR         ; Not there yet, keep reading
          clre                    ; Clear E
          ldab    #$22
@@ -150,7 +155,6 @@ RDCOUNT: jsr     RXBYTE          ; tell us how many bytes you're sending
          jsr     RXBYTE          ; get low byte
          stab    CNTBYTE+1
          jsr     TXBYTE
-         incw    CNTBYTE         ; because I am a terrible coder.
          rts
 
 CMD_40:  ldab    #$41
@@ -173,7 +177,7 @@ WTMRGOOD: jsr     RD_STAT         ; Fetch status
          andd    #$80            ; check ready bit
          beq     WTMRLOOP        ; bit 8 = 0, busy / not ready
          ldd     E,Y             ; Read a memory word stored by command 30
-         cpd     #0FFFFh         ; There's an assumption that we only write to an erased flash, which is all 0xFFFF
+         cpd     #0FFFFh         ; Flash program can only write zeros; an erased flash is all ones (0xFFFF)
          beq     EFFS            ; if it's all 0xFFFF, we don't write it
          ldd     #$40            ; CSM 0x40 program setup command
          std     E,X             ; Send program setup command
@@ -186,6 +190,7 @@ WTMRGOOD: jsr     RD_STAT         ; Fetch status
 WRINCLP: adde    #2              ; We're good, move to the next word
          cpe     CNTBYTE         ; if E - $count == 0
          bne     WR_LOOP         ; if it's not zero we still have more to go
+         jsr     RDARRAY
          ldab    #$22            ; 22 seems to generally be "success"
          bra     ECHOXIT
 
@@ -194,7 +199,6 @@ EFFS:    jsr     RDARRAY
          subd    E,Y             ; Subtract Memory Effs from Flash Effs
          bne     WR_ERR          ; If one of those wasn't 0xFFFF, we fucked up.
          ldd     E,X             ; Read the word at X+count from flash (again)
-         jsr     TXFLSHWD        ; Echo the two bytes of 0xFF we didn't write
          bra     WRINCLP         ; go back into the loop and increment
 
 WR_ERR:  jsr     RDARRAY
@@ -203,7 +207,7 @@ WR_ERR:  jsr     RDARRAY
 
 TMOUTERR: ldab    #$80            ; i guess.
 ECHOXIT: jsr     TXBYTE
-         lbra    START           ; no dice homey
+         lbra    START           
 
 RDARRAY: ldd     #0FFh           ; CSM Read Array command
          std     E,X             ; Send CSM Read Array
@@ -225,16 +229,16 @@ PGMADDR: jsr     RXBYTE          ; Read BANK byte
          rts
 
 LOADY:   ldab    #0
-         tbyk                    ; YK:IY = 0x00396
-         ldy      #SETUP          ; NOTE this is the memory location for the start of SETUP and will change
-         rts                     ; if the assembly changes. We overwrite our init code as RAM buffer. I couldn't figure 
-                                 ; how to do this with a label :(
-TXFLSHWD: stab    RDR_X          ; store B to word
-         tab                     ; A -> B
-         jsr     TXBYTE          ; Echo B
-         ldab    RDR_X           ; load B with memory content
-         jsr     TXBYTE          ; write SCI byte from B
-         rts 
+         tbyk                    ; YK:IY = 0x00XXX
+         ldy     #SETUP          ; Use the memory location for the start of SETUP so we overwrite it
+         rts                     
+
+;TXWORD:  stab    RDR_X          ; store B to word
+;         tab                     ; A -> B
+;         jsr     TXBYTE          ; Echo B
+;         ldab    RDR_X           ; load B with memory content
+;         jsr     TXBYTE          ; write SCI byte from B
+;         rts 
 
 SETUP:   ORP     #$00E0         
          LDAB    #$0F
