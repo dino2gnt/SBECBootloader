@@ -78,6 +78,7 @@
 
 # ECUWriter script
 ---------  
+SHows off the basic functions of th reflash kernel. I'm not fluent in Python, so be warned.
 ```
 $ ./ecuwriter.py --help
 usage: ecuwriter.py [-h] [--device SERIALDEVICE] [--baud BAUD] [--already-bootstrapped READYBS] [--write BINFILE] [--writebuffer BUFFERSIZE] [--read DUMPFILE] [--read-partnum RPARTNUM] [--write-partnum WPARTNUM] [--read-vin RVIN] [--write-vin WVIN] [--256k EEPROM256] [--128k EEPROM128] [--erase ERASEBANK]
@@ -115,3 +116,21 @@ optional arguments:
                         Write SENDSERIAL bytes of data to the device and exit
   --debug DEBUG         Show lots of debug output
   ```
+
+# Checksum script
+---------  
+For writing updated checksums to modified firmware images. Again, not fluent in Python, so Don't Blame Dino™.
+```
+$ ./checksum.py --help
+usage: checksum.py [-h] --binfile BINFILE [--write-checksum WRITE] [--debug DEBUG]
+
+Calculate and optionally store checksum for an SBEC3 firmware image
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --binfile BINFILE, -b BINFILE
+                        The firmware image to work on
+  --write-checksum WRITE, -w WRITE
+                        Write the checksum to the firmware image. (default False)
+  --debug DEBUG         Show lots of debug output
+```
