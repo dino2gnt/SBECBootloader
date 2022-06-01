@@ -11,6 +11,10 @@ START:   jsr     RXBYTE
          lbeq    CMD_40
          cmpb    #$45           ; cmd 45 is bulk memory dump
          lbeq    CMD_45
+         cmpb    #$50           ; cmd 45 is bulk memory dump
+         lbeq    CMD_50
+         cmpb    #$55           ; cmd 45 is bulk memory dump
+         lbeq    CMD_55
          bne     START
 
 CMD_10:  ldab    #$11
@@ -139,7 +143,7 @@ CMD_30:  ldab    #$31            ; request 0x30, 0xFF: upload 255 bytes
          jsr     LOADY
          clre                    ; Clear E
 RD_STOR: jsr     RXBYTE          ; Read a byte
-         stab    E,Y             ; Store it starting at E = 0 and Y = 0x00680
+         stab    E,Y             ; Store it starting at E = 0 and Y = #START
          adde    #1
          cpe     CNTBYTE         ; if E - CNTBYTE == 0
          bne     RD_STOR         ; Not there yet, keep reading
@@ -233,13 +237,93 @@ LOADY:   ldab    #0
          ldy     #SETUP          ; Use the memory location for the start of SETUP so we overwrite it
          rts                     
 
-;TXWORD:  stab    RDR_X          ; store B to word
-;         tab                     ; A -> B
-;         jsr     TXBYTE          ; Echo B
-;         ldab    RDR_X           ; load B with memory content
-;         jsr     TXBYTE          ; write SCI byte from B
-;         rts 
+; CMD 50 / 55 read & write EEPROM 
+CMD_50:  ldab    #$51
+         jsr     TXBYTE          ; echo 51 
+         jsr     RDCOUNT         ; reuse RDCOUNT to save space
+         bra     RDEEPROM
 
+CMD_55:  ldab    #$56
+         jsr     TXBYTE          ; echo 56
+         jsr     RDCOUNT         ; reuse RDCOUNT to save space, buts H&L byte in CNTBYTE
+         jsr     RXBYTE          ; eeprom offset high byte
+         stab    ADRWORD         ; payload
+         jsr     TXBYTE          ; echo B1
+         jsr     RXBYTE          ; eeprom offset low byte
+         stab    ADRWORD+1       ; payload
+         jsr     TXBYTE          ; echo B2
+         bra     WREEPROM
+
+QSPIBUSY:bclr    $7C1F,Z,#80h    ; Clear QSPI finished flag
+         bset    $7C1A,Z,#80h    ; set DTL
+         clra
+QSPI_BL: deca
+         beq     QSPIBAIL
+         brclr   $7C1F,Z,#80h,QSPI_BL ; Loop until QSPI finished flag is set
+         bclr    $7C1F,Z,#80h    ; Clear QSPI finished flag
+QSPIBAIL: tsta
+         rts
+
+RDEEPROM:ldd     CNTBYTE
+         cpd     #$200
+         bcc     QSPIERR
+         asla
+         asla
+         asla
+         oraa    #3
+         std     $7D22,Z         ; txram
+         ldaa    #$CB
+         ldab    #$4B
+         std     $7D41,Z         ; cmd ram
+         ldd     #$201
+         std     $7C1C,Z         ; SPCR2
+         jsr     QSPIBUSY
+         beq     QSPIERR 
+         ldd     $7D04,Z         ; rxram
+         tde
+         tab
+         jsr     TXBYTE          ; echo rA
+         ted
+         jsr     TXBYTE          ; echo rB
+         lbra    START
+QSPIERR: ldab    #$1             ; Error
+         jsr     TXBYTE
+         jsr     TXBYTE
+         lbra    START
+
+WREEPROM: 
+         ldaa    #$0B
+         staa    $7D41,Z         ; cmdram
+         ldd     #6
+         std     $7D22,Z         ; txram
+         ldd     #$101
+         std     $7C1C,Z         ; spcr2
+         jsr     QSPIBUSY
+         beq     QSPIERR
+         ldd     CNTBYTE         ; eeprom offset
+         cpd     #$200
+         bcc     QSPIERR
+         asla
+         asla
+         asla
+         oraa    #2 
+         std     $7D22,Z         ; txram
+         ldd     ADRWORD         ; payload in ADRWORD
+         std     $7D24,Z         ; txram this was 24
+         ldaa    #$0B
+         staa    $7D43,Z         ; cmdram
+         ldaa    #$CB 
+         ldab    #$4B 
+         std     $7D41,Z         ; cmdram this was 41
+         ldd     #$201
+         std     $7C1C,Z         ; spcr2
+         jsr     QSPIBUSY
+         beq     QSPIERR
+         ldd     #5000
+         jsr     DELAY
+         lbra    RDEEPROM
+
+; SETUP SECTION - everything past this point is overwritten by CMD30 payload
 SETUP:   ORP     #$00E0         
          LDAB    #$0F
          TBZK
@@ -303,7 +387,7 @@ QSPI:    LDD     #$4088
          STAA    $7C15,Z
          LDAA    #$FE
          STAA    $7C17,Z
-         LDD     #$8108
+         LDD     #$8108 
          STD     $7C18,Z
          LDD     #$1000
          STD     $7C1A,Z
