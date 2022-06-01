@@ -54,7 +54,7 @@
    * Response: ````46 0X XX XX YY YY````
        * Response will be followed by ````YY YY```` count of bytes starting from ````0X XX XX````
    * Success: ````22````
-   * **Note**: Too large of a ````YY YY```` value can cause unexpected problems on your recieving device.  Be cautious with large values
+   * **Note**: Too large of a ````YY YY```` value can cause unexpected problems on your receiving device.  Be cautious with large values. 00 40 (64 bytes) is generally safe.
 
 ### EEPROM read:
 ---------
@@ -74,7 +74,7 @@
       * The complete command is echoed with a 56 acknowledge, with the addition of the contents of the EEPROM offset after writing.
       * No error checking is done with these values in the reflash kernel. If they don't match, the write did not succeed. 
    * Failure:
-      * ````51 0X XX YY YY 01```` if the EEPROM write fails. (probably?)
+      * ````56 0X XX YY YY 01```` if the EEPROM write fails. (probably?)
 
 # ECUWriter script
 ---------  
