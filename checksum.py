@@ -27,14 +27,26 @@ def calcChecksum(file):
        byte = file.read(1) 
     return csum.to_bytes(1, 'big')
 
-def readChecksumValues(file):
-    file.seek(773);
+def readChecksumValues(file,offset):
+    file.seek(3 + offset); #0x305
     csumByte1 = file.read(1);
-    file.seek(783);
+    file.seek(13 +  offset); #0x30F
     csumByte2 = file.read(1);
     file.seek(0);
 
     return csumByte1, csumByte2
+
+def readChecksumOffset(file):
+    file.seek(514); #0x203
+    csumByte1 = file.read(1);
+    file.seek(515); #0x203
+    csumByte2 = file.read(1);
+    file.seek(0);
+    offset = int.from_bytes(csumByte1, "big")
+    offset = offset << 8
+    offset += int.from_bytes(csumByte2, "big")
+
+    return offset
 
 def calcNewChecksum(checksum, csumByte1, csumByte2):
     sumDiff = int.from_bytes(csumByte1,"big") - int.from_bytes(checksum,"big")
@@ -50,8 +62,8 @@ def calcNewChecksum(checksum, csumByte1, csumByte2):
     
     return newCorrectionByte.to_bytes(1, 'big')
 
-def writeCorrectionByte(f, correction):
-    f.seek(783)
+def writeCorrectionByte(f, correction, offset):
+    f.seek(13 + offset)
     f.write(correction)
     f.flush()
 
@@ -61,11 +73,13 @@ if args.binFile is not None:
       exit(1)
 
    f = open(args.binFile, "r+b")
+   offset = readChecksumOffset(f)
    checksum = calcChecksum(f)
-   csumByte1, csumByte2 = readChecksumValues(f)
+   csumByte1, csumByte2 = readChecksumValues(f, offset)
    correction = calcNewChecksum(checksum, csumByte1, csumByte2)
 
    if args.debug:
+      print("Offset: ", hex(offset))
       print("Read Checksum Byte     = ", csumByte1.hex())
       print("Read Correction Byte   = ", csumByte2.hex())
       print("Calculated checksum    = ", checksum.hex())
@@ -79,7 +93,7 @@ if args.binFile is not None:
       print("Checksum doesn't match, correction byte",csumByte2.hex(), "should be",correction.hex(),"!")
 
    if args.write:
-      writeCorrectionByte(f,correction)
+      writeCorrectionByte(f,correction, offset)
       f.close()
       f = open(args.binFile, "rb")
       print("Wrote correction byte",correction.hex(),", verifing checksum...")
@@ -87,7 +101,7 @@ if args.binFile is not None:
       if args.debug:
          print("New checksum:",newChecksum.hex())
          print("checksum byte:",csumByte1.hex())
-      csumByte1, csumByte2 = readChecksumValues(f)
+      csumByte1, csumByte2 = readChecksumValues(f, offset)
       if csumByte1 == newChecksum:
          print("Checksum matches!")
          print("Read:",csumByte1.hex(), csumByte2.hex()," Calculated:",newChecksum.hex(), correction.hex())
