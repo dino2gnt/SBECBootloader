@@ -10,20 +10,19 @@ import time
 parser = argparse.ArgumentParser(description='A basic ECU reader & writer for the SBEC3')
 parser.add_argument('--device','-d', dest='serialDevice', action='store', default='/dev/ttyUSB0', help='The serial device to use (default: /dev/ttyUSB0)')
 parser.add_argument('--baud', '-b', dest='Baud', action='store', default=62500, type=int, help='Connection baud rate (default: 62500)')
-parser.add_argument('--already-bootstrapped', '-a', dest='readyBS', action='store', default=False, help='If the ECU is already in bootstrap with a running bootloader, use this to skip handshake and upload (default: False)')
+parser.add_argument('--skip-bootstrap', '-s', dest='readyBS', action='store_const', const=True, default=False, help='If the ECU is already in bootstrap with a running bootloader, use this to skip handshake and upload (default: False)')
 parser.add_argument('--write','-w', dest='binFile', action='store', help='The path and filename of the binary file to write to the ECU')
 parser.add_argument('--writebuffer','-u', dest='bufferSize', action='store', type=int, default=2048,  help='The amount of ECU RAM to use for write buffer. (default: 2048)')
 parser.add_argument('--read','-r', dest='dumpFile', action='store', default=None, help='Read the ECU flash and store it as DUMPFILE')
-parser.add_argument('--read-partnum','-p', dest='rpartNum', action='store', help='Read and print the part number stored in the ECU EEPROM')
-parser.add_argument('--write-partnum','-n', dest='wpartNum', action='store', help='Write a part number stored to the ECU EEPROM')
-parser.add_argument('--read-vin','-v', dest='rvin', action='store', help='Read and print the VIN stored in the ECU EEPROM')
-parser.add_argument('--write-vin','-i', dest='wvin', action='store', help='Write a VIN to the ECU EEPROM')
-parser.add_argument('--256k', dest='eeprom256', action='store', default='True', help='256K firmware image (default: True)')
-parser.add_argument('--128k', dest='eeprom128', action='store', default='False', help='128K firmware image (default: False)')
-parser.add_argument('--erase', dest='eraseBank', action='store', default=None, help='Erase Flash Bank [0,1,2,3,4|ALL], required prior to reprogramming (default: None)')
-parser.add_argument('--read-serial', dest='readserial', action='store', default=None, type=int, help='Read READSERIAL bytes of data from the buffer and exit')
-parser.add_argument('--send-serial', dest='sendserial', action='store', default=None, help='Write SENDSERIAL bytes of data to the device and exit')
-parser.add_argument('--debug', dest='debug', action='store', default=False, help='Show lots of debug output')
+parser.add_argument('--read-partnum','-p', dest='rpartNum', action='store_const', const=True, default=None, help='Read and print the part number stored in the ECU EEPROM')
+parser.add_argument('--write-partnum','-n', dest='wpartNum', action='store_const', const=True, default=None, help='Write a part number stored to the ECU EEPROM')
+parser.add_argument('--read-vin','-v', dest='rvin', action='store_const', const=True, default=None, help='Read and print the VIN stored in the ECU EEPROM')
+parser.add_argument('--write-vin','-i', dest='wvin', action='store_const', const=True, default=None, help='Write a VIN to the ECU EEPROM')
+parser.add_argument('--flash-size', '-f', dest='flashsz', action="store", choices=['128', '256'], default='256', help='Flash firmware image size. MOST SBEC3 ECUs are 256K (default: 256)')
+parser.add_argument('--erase', dest='eraseBank', action='store', choices=['0', '1', '2', '3', '4', 'ALL'], default=None, help='Erase Flash Bank [0,1,2,3,4|ALL], required prior to reprogramming (default: None)')
+parser.add_argument('--read-serial', dest='readserial', action='store', default=None, type=int, help='Read READSERIAL bytes of data from the buffer and exit, used to read the output of raw commands.')
+parser.add_argument('--send-serial', dest='sendserial', action='store', default=None, help='Write serial data to the device. Used to send raw commands. Follow with --read-serial # to read # bytes of the response')
+parser.add_argument('--debug', dest='debug', action='store_const', const=True, default=False, help='Show lots of debug output')
 args = parser.parse_args()
 
 #Python sucks ass for bitwise math on bytes :-/
@@ -194,7 +193,7 @@ if args.dumpFile is not None:
          pass
       else:
          exit(1)
-   if args.eeprom128 == True:
+   if args.flashsz == 128:
       imageSize = 131071
    else:
       imageSize = 262143

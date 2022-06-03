@@ -78,11 +78,11 @@
 
 # ECUWriter script
 ---------  
-SHows off the basic functions of th reflash kernel. I'm not fluent in Python, so be warned.
+Shows off the basic functions of th reflash kernel. I'm not fluent in Python, so be warned.
 ```
 $ ./ecuwriter.py --help
-usage: ecuwriter.py [-h] [--device SERIALDEVICE] [--baud BAUD] [--already-bootstrapped READYBS] [--write BINFILE] [--writebuffer BUFFERSIZE] [--read DUMPFILE] [--read-partnum RPARTNUM] [--write-partnum WPARTNUM] [--read-vin RVIN] [--write-vin WVIN] [--256k EEPROM256] [--128k EEPROM128] [--erase ERASEBANK]
-                    [--read-serial READSERIAL] [--send-serial SENDSERIAL] [--debug DEBUG]
+usage: ecuwriter.py [-h] [--device SERIALDEVICE] [--baud BAUD] [--skip-bootstrap] [--write BINFILE] [--writebuffer BUFFERSIZE] [--read DUMPFILE] [--read-partnum] [--write-partnum] [--read-vin] [--write-vin] [--flash-size {128,256}] [--erase {0,1,2,3,4,ALL}] [--read-serial READSERIAL] [--send-serial SENDSERIAL]
+                    [--debug]
 
 A basic ECU reader & writer for the SBEC3
 
@@ -91,30 +91,26 @@ optional arguments:
   --device SERIALDEVICE, -d SERIALDEVICE
                         The serial device to use (default: /dev/ttyUSB0)
   --baud BAUD, -b BAUD  Connection baud rate (default: 62500)
-  --already-bootstrapped READYBS, -a READYBS
-                        If the ECU is already in bootstrap with a running bootloader, use this to skip handshake and upload (default: False)
+  --skip-bootstrap, -s  If the ECU is already in bootstrap with a running bootloader, use this to skip handshake and upload (default: False)
   --write BINFILE, -w BINFILE
                         The path and filename of the binary file to write to the ECU
   --writebuffer BUFFERSIZE, -u BUFFERSIZE
                         The amount of ECU RAM to use for write buffer. (default: 2048)
   --read DUMPFILE, -r DUMPFILE
                         Read the ECU flash and store it as DUMPFILE
-  --read-partnum RPARTNUM, -p RPARTNUM
-                        Read and print the part number stored in the ECU EEPROM
-  --write-partnum WPARTNUM, -n WPARTNUM
-                        Write a part number stored to the ECU EEPROM
-  --read-vin RVIN, -v RVIN
-                        Read and print the VIN stored in the ECU EEPROM
-  --write-vin WVIN, -i WVIN
-                        Write a VIN to the ECU EEPROM
-  --256k EEPROM256      256K firmware image (default: True)
-  --128k EEPROM128      128K firmware image (default: False)
-  --erase ERASEBANK     Erase Flash Bank [0,1,2,3,4|ALL], required prior to reprogramming (default: None)
+  --read-partnum, -p    Read and print the part number stored in the ECU EEPROM
+  --write-partnum, -n   Write a part number stored to the ECU EEPROM
+  --read-vin, -v        Read and print the VIN stored in the ECU EEPROM
+  --write-vin, -i       Write a VIN to the ECU EEPROM
+  --flash-size {128,256}, -f {128,256}
+                        Flash firmware image size. MOST SBEC3 ECUs are 256K (default: 256)
+  --erase {0,1,2,3,4,ALL}
+                        Erase Flash Bank [0,1,2,3,4|ALL], required prior to reprogramming (default: None)
   --read-serial READSERIAL
-                        Read READSERIAL bytes of data from the buffer and exit
+                        Read READSERIAL bytes of data from the buffer and exit, used to read the output of raw commands.
   --send-serial SENDSERIAL
-                        Write SENDSERIAL bytes of data to the device and exit
-  --debug DEBUG         Show lots of debug output
+                        Write serial data to the device. Used to send raw commands. Follow with --read-serial # to read # bytes of the response
+  --debug               Show lots of debug output
   ```
 
 # Checksum script
