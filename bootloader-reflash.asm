@@ -1,19 +1,19 @@
          ORG     $0100
          LBRA    SETUP          ; initialization is at the very end, so it can be run once and overwritten
 START:   jsr     RXBYTE
-         cmpb    #$10           ; cmd 10 will echo 11.
+         cmpb    #$10           ; cmd 10 will echo 11 (are you alive?)
          beq     CMD_10
          cmpb    #$20           ; cmd 20 is bank erase
          lbeq    CMD_20
          cmpb    #$30           ; cmd 30 is write flash chunk to mem
          lbeq    CMD_30
-         cmpb    #$40           ; cmd 40 is copy from mem to flash
+         cmpb    #$40           ; cmd 40 is read from mem and write to flash
          lbeq    CMD_40
          cmpb    #$45           ; cmd 45 is bulk memory dump
          lbeq    CMD_45
-         cmpb    #$50           ; cmd 45 is bulk memory dump
+         cmpb    #$50           ; cmd 50 is read word from EEPROM offset
          lbeq    CMD_50
-         cmpb    #$55           ; cmd 45 is bulk memory dump
+         cmpb    #$55           ; cmd 55 is write word to EEPROM offset
          lbeq    CMD_55
          bne     START
 
@@ -287,7 +287,6 @@ RDEEPROM:ldd     CNTBYTE
          jsr     TXBYTE          ; echo rB
          lbra    START
 QSPIERR: ldab    #$1             ; Error
-         jsr     TXBYTE
          jsr     TXBYTE
          lbra    START
 
