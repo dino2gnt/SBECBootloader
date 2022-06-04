@@ -6,8 +6,8 @@ import signal
 
 parser = argparse.ArgumentParser(description='Calculate and optionally store checksum for an SBEC3 firmware image')
 parser.add_argument('--binfile', '-b', dest='binFile', action='store', default=None, required=True, help='The firmware image to work on')
-parser.add_argument('--write-checksum', '-w', dest='write', action='store', default=False, help='Write the checksum to the firmware image. (default False)')
-parser.add_argument('--debug', dest='debug', action='store', default=False, help='Show lots of debug output')
+parser.add_argument('--write-checksum', '-w', dest='write', action='store_const', const=True, default=False, help='Write the checksum to the firmware image. (default False)')
+parser.add_argument('--debug', dest='debug', action='store_const', const=True, default=False, help='Show lots of debug output')
 args = parser.parse_args()
 
 def handler(signum, frame):
