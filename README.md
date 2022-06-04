@@ -27,18 +27,18 @@ I use this script with the embedded reflash kernel and a [CP2102](https://www.am
 
 #### Write to buffer:
   * Request: ````30 0Y YY````
-         * YY is the count of bytes to write to RAM buffer, zero indexed, ````0x0000```` to ````0xFFFF````. Writes from Command 30 populate a RAM buffer starting at ````0x00540````.
+         * YY is the count of bytes to write to RAM buffer, zero indexed, ````0x0000```` to ````0xFFFF````. Writes from Command 30 populate a RAM buffer starting at approximately ````0x00490````. This leaves about 800 bytes of RAM for write buffer on an ECU with 2KB ('96-'97).
     * Response: ````31 0Y YY````
        * Follow the response with ````0x0YYY```` bytes of data to be written to RAM buffer
        * Bytes not echoed
        * SCI RX does NOT have to be +20V
    * Success: ````22```` is echoed when YYYY bytes have been received.
-   * **Note**: The RAM buffer size is limited to the amount of available RAM. I don't recommend greater than ````0x03FF```` (1K) unless you know what you're doing.  There is no range check and we will happily try to write off the end of RAM and crash if you ask us to.
+   * **Note**: The RAM buffer size is limited to the amount of available RAM. I don't recommend greater than ````0x0300```` (768 bytes) unless you know what you're doing.  There is no range check and we will happily try to write off the end of RAM and crash if you ask us to.
 
 #### Write to flash:
    * Request: ````40 0X XX XX 0Y YY````
        * 0X XX XX is the starting address in flash memory for the write
-       * YYYY is the count of bytes to write from the RAM buffer to flash anbd should match the YYYY used to stage data to RAM.
+       * YYYY is the count of bytes to write from the RAM buffer to flash and should match the YYYY used to stage data to RAM.
    * Response: ````41 0X XX XX YY YY````
       * After sending the response, we enter a timer-loop that counts down approximately 15 seconds, attempting a write each iteration until time runs out or it succeeds. SCI RX must be +20V for the write to succeed.
    * Success: ````22```` is echoed when YY bytes have been successfully written to flash memory
