@@ -1,5 +1,6 @@
 # Experimental SBEC3 reflashing kernel
 ---------  
+I use this script with the embedded reflash kernel and a [CP2102](https://www.amazon.com/gp/product/B07R3388DW) connected to ground, SCI TX (pin 6 in the OBD2 connector) and SCI RX (pin 25 in the 12-pin diag connector next to the OBD2 connector).  +20V programming voltage is supplied by a 24V PoE adapter i had laying around, turned down to 20V with a [buck converter](https://www.amazon.com/dp/B07VVXF7YX) and switch on and off via the CP2102's RTS output with a cheapy mechanical [relay board](https://www.amazon.com/gp/product/B08C71QL65).  For the 2GNT (and probably Avenger, Sebring, Neon, Cloud cars) there is an [annotated excerpt from the FSM](https://github.com/dino2gnt/SBECBootLoader/blob/master/connections.png) illustrating these connections.
 
 ## Commands
 ---------
