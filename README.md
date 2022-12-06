@@ -2,6 +2,34 @@
 ---------  
 I use this script with the embedded reflash kernel and a [CP2102](https://www.amazon.com/gp/product/B07R3388DW) connected to ground, SCI TX (pin 6 in the OBD2 connector) and SCI RX (pin 25 in the 12-pin diag connector next to the OBD2 connector).  +20V programming voltage is supplied by a 24V PoE adapter I had laying around, turned down to 20V with a [buck converter](https://www.amazon.com/dp/B07VVXF7YX) and switched on and off via the CP2102's RTS output and a cheapy mechanical [relay board](https://www.amazon.com/gp/product/B08C71QL65).  For the 2GNT (and probably Avenger, Sebring, Neon, Cloud cars) there is an [annotated excerpt from the FSM](https://github.com/dino2gnt/SBECBootLoader/blob/master/connections.png) illustrating these connections.  I run everything in Linux. It probably won't work under Windows (and I don't care). 
 
+If you connect directly to the ECU on a bench, the pins you need are:
+
+ * Pin 10: Ground
+ * Pin 20: Switched 12V+ (Run)
+ * Pin 46: Constant 12V+ (Battery)
+ * Pin 47: Ground
+ * Pin 65: SCI TX
+ * Pin 75: SCI RX
+
+In my experience, these connections are universal across the entire SBEC3 family.  If you know of one that is different, please let me know.
+
+12V+ power is supplied by a 12V wall-wart from the box of random power supplies and cables in the back of the closet (you know the box I mean).
+
+For the CP2102:
+
+ * Pin TX connects to Normally Open (NO) on the relay board
+ * Pin RX connects to Pin 65 on the ECU (SCI TX)
+ * Pin RTS connects to IN on the relay board
+ * Pin 5V+ connects to DC+ on the relay board
+ * Pin GND to DC- on the relay board
+ * Connect the other ground pin to a common ground shared by the ECU power supply
+ 
+On the relay board:
+
+ * Connect 20V+ to Normally Closed (NC)
+
+The ecuwriter script toggles the CP2102's RTS pin in order to switch the 20V+ programming voltage on and off.
+
 ## Commands
 ---------
 
@@ -83,16 +111,18 @@ I use this script with the embedded reflash kernel and a [CP2102](https://www.am
 Shows off the basic functions of the reflash kernel. I'm not fluent in Python, so be warned. Requires argparse, signal, time, and pyserial.
 ```
 $ ./ecuwriter.py --help
-usage: ecuwriter.py [-h] [--device SERIALDEVICE] [--baud BAUD] [--skip-bootstrap] [--write BINFILE] [--writebuffer BUFFERSIZE] [--read DUMPFILE] [--read-partnum] [--write-partnum] [--read-vin] [--write-vin] [--flash-size {128,256}] [--erase {0,1,2,3,4,ALL}] [--read-serial READSERIAL] [--send-serial SENDSERIAL]
-                    [--debug]
+usage: ecuwriter.py [-h] [--device SERIALDEVICE] [--baud BAUD] [--bootloader BOOTLOADER] [--skip-bootstrap] [--write BINFILE] [--writebuffer BUFFERSIZE] [--read DUMPFILE] [--read-partnum] [--write-partnum] [--read-vin] [--write-vin] [--flash-size {128,256}] [--erase {0,1,2,3,4,ALL}] [--read-serial READSERIAL]
+                    [--send-serial SENDSERIAL] [--invert-rts] [--debug]
 
 A basic ECU reader & writer for the SBEC3
 
-optional arguments:
+options:
   -h, --help            show this help message and exit
   --device SERIALDEVICE, -d SERIALDEVICE
                         The serial device to use (default: /dev/ttyUSB0)
   --baud BAUD, -b BAUD  Connection baud rate (default: 62500)
+  --bootloader BOOTLOADER, -l BOOTLOADER
+                        Bootloader image to use (default: bootloader.bin)
   --skip-bootstrap, -s  If the ECU is already in bootstrap with a running bootloader, use this to skip handshake and upload (default: False)
   --write BINFILE, -w BINFILE
                         The path and filename of the binary file to write to the ECU
@@ -112,6 +142,7 @@ optional arguments:
                         Read READSERIAL bytes of data from the buffer and exit, used to read the output of raw commands.
   --send-serial SENDSERIAL
                         Write serial data to the device. Used to send raw commands. Follow with --read-serial # to read # bytes of the response
+  --invert-rts          Swap RTS hi / low if you are defaulting to RTS hi for some reason (default: False)
   --debug               Show lots of debug output
   ```
 
