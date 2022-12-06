@@ -1,4 +1,4 @@
-#!/usr/bin/env python3.9
+#!/usr/bin/env python3.10
 
 import argparse
 import os
@@ -9,7 +9,8 @@ import time
 
 parser = argparse.ArgumentParser(description='A basic ECU reader & writer for the SBEC3')
 parser.add_argument('--device','-d', dest='serialDevice', action='store', default='/dev/ttyUSB0', help='The serial device to use (default: /dev/ttyUSB0)')
-parser.add_argument('--baud', '-b', dest='Baud', action='store', default=62500, type=int, help='Connection baud rate (default: 62500)')
+parser.add_argument('--baud', '-b', dest='Baud', action='store', default=62500, type=float, help='Connection baud rate (default: 62500)')
+parser.add_argument('--bootloader', '-l', dest='bootloader', action='store', default="bootloader.bin", help='Bootloader image to use (default: bootloader.bin)')
 parser.add_argument('--skip-bootstrap', '-s', dest='readyBS', action='store_const', const=True, default=False, help='If the ECU is already in bootstrap with a running bootloader, use this to skip handshake and upload (default: False)')
 parser.add_argument('--write','-w', dest='binFile', action='store', help='The path and filename of the binary file to write to the ECU')
 parser.add_argument('--writebuffer','-u', dest='bufferSize', action='store', type=int, default=2048,  help='The amount of ECU RAM to use for write buffer. (default: 2048)')
@@ -22,6 +23,7 @@ parser.add_argument('--flash-size', '-f', dest='flashsz', action="store", choice
 parser.add_argument('--erase', dest='eraseBank', action='store', choices=['0', '1', '2', '3', '4', 'ALL'], default=None, help='Erase Flash Bank [0,1,2,3,4|ALL], required prior to reprogramming (default: None)')
 parser.add_argument('--read-serial', dest='readserial', action='store', default=None, type=int, help='Read READSERIAL bytes of data from the buffer and exit, used to read the output of raw commands.')
 parser.add_argument('--send-serial', dest='sendserial', action='store', default=None, help='Write serial data to the device. Used to send raw commands. Follow with --read-serial # to read # bytes of the response')
+parser.add_argument('--invert-rts', dest='invert_rts', action='store_const', const=True, default=False, help='Swap RTS hi / low if you are defaulting to RTS hi for some reason (default: False)')
 parser.add_argument('--debug', dest='debug', action='store_const', const=True, default=False, help='Show lots of debug output')
 args = parser.parse_args()
 
@@ -55,39 +57,28 @@ def handler(signum, frame):
     ser.close()
     exit(1)
 
+if args.invert_rts:
+   rts_on = False
+   rts_off = True
+else:
+   rts_on = True
+   rts_off = False
+
 signal.signal(signal.SIGINT, handler)
 
-loader = bytearray.fromhex("""4c010005DF37800386fa000150f810b722f820378700aef83037870166f840378701a6f84537870044f85037870266f8553787026cb6cef511fa00013ab7c617657c0c7601
-b7f417ea7c0f37b50043fa00016027f717657c0d76427840b6f217e57c0f27f737b00001b6f627f7274cf546fa00013afa000150379cfa00013afa00015017fa
-01c0fa00013afa00015017fa01c117fc01c0fa00013afa00015017fa0168fa00013afa00015017fa0169fa00013ac500fa00013a3c0127310168b6ee3780ff42
-274cf521fa00013afa000150379cfa00013afa00015017fa01c0fa00013afa00015017fa01c1fa00013a17fc01c0fa000274fa00025e37b5001f37fa02aa2a10
-7922000efa00025efa000248273102aab718fa000250fa00023e37b60080b7dafa00023e37b60078b6d0f522b000fa00023efa00013afa0002483780fec437b5
-00708a00850027f737b500508a0027f737b500208a0037b500d08a0027f737e5790a37b1f42437ea791617e579222810792227f71725791ef50617ea792127f7
-f531fa00013afa0002acfa0003882775fa00015027da7c01377802aab6ee2775f522fa00013a3780fe58274cfa00015017fa02aafa00013afa00015017fa02ab
-fa00013a27f7f541fa00013afa00035afa000388fa000248fa000274fa00025e37b5001f37fa01c02a107922000efa00025efa000248273101c0b748fa00023e
-37b60080b7de279537b8ffffb72037b50040278a2795278afa00023e37b60078b6c27c02377802aab6aafa000352f522b014fa00035227852790b6002785b0de
-fa000352f501b0fef580fa00013a3780fdb037b500ff278a27f7fa000150379cfa00013afa00015017fa01c0fa00013afa00015017fa01c1fa00013afa0002ac
-17fc01c0277527f7f500379d37bd048c27f7f551fa00013afa0002acb03cf556fa00013afa0002acfa00015017fa01c0fa00013afa00015017fa01c1fa00013a
-b06428807c1f29807c1a37053701b7062a807c1ffff628807c1f370627f737f502aa37b80200b434370437043704770337ea7d2275cbf54b37ea7d4137b50201
-37ea7c1cfa0003c2b71237e57d04277b3717fa00013a27fbfa00013a3780fce2f501fa00013a3780fcd8750b176a7d4137b5000637ea7d2237b5010137ea7c1c
-fa0003c2b7d637f502aa37b80200b4cc370437043704770237ea7d2237f501c037ea7d24750b176a7d4375cbf54b37ea7d4137b5020137ea7c1cfa0003c2b79c
-37b51388fa0001603780ff50373b00e0f50f379e37be8000f500379f37bf07f617e57a02f883b70037bf0ff6371527fa379d37b5014837ea7a0028807a2137b5
-00cf37ea7a4437b5040537ea7a4837ea7a4c37b568f037ea7a4a37b570f037ea7a4e37b5ff8837ea7a5437b5783037ea7a5637b5f88137ea081437e5081237b7
-000137ea081237b5000037ea081827290806ffff2729080803ff27f53735082427aa7c0437380838b3f417257920272808602000fa000542f522fa00013a3780
-fbc037b5408837ea7c007506176a7c0475fe176a7c057533176a7c1675f8176a7c1575fe176a7c1737b5810837ea7c1837b5100037ea7c1a37b5000037ea7c1c
-7500176a7c1e37354242376a7d4137350202376a7d433735c202376a7d453735c242376a7d4837b5010037ea7d2437b5020237ea7c1cfa0005bc27f728807c1f
-29807c1a37053701b70a2a807c1ffff628807c1f3706b002373b010037fc27f7""")
+#loader = bytearray.fromhex("""4c010005DF""")
       
 ser = serial.serial_for_url(args.serialDevice, do_not_open=True)
-ser.rts = False
+ser.rts = rts_off
 ser.timeout = 3
 ser.baudrate = args.Baud
 
 try:
    ser.open()
+   ser.rts = rts_off
 except serial.SerialException as e:
-   sys.stderr.write('Could not open serial port {}: {}\n'.format(ser.name, e))
-   sys.exit(1)
+   print('Could not open serial port {}: {}\n'.format(ser.name, e))
+   exit(1)
 
 print('Using device ' + ser.name + ' at', args.Baud, 'baud, 8N1')
 
@@ -104,11 +95,12 @@ if args.readyBS == False:  #the user says we're already bootstrapped, so skip th
       print("Skipping bootstrap!")
       pass
    elif yn == 'y':
-      ser.rts = True
+      ser.rts = rts_on
       print ("20V+ ON for 10 seconds. Turn key on now!")
       time.sleep(10)
-      ser.rts = False
+      ser.rts = rts_off
       print ("20V+ OFF! Trying Magic Byte...")
+      time.sleep(3)
       ser.read(4) #read until timeout to clear the buffer of bootup output
 
       # Handshake ?
@@ -153,23 +145,38 @@ if args.readyBS == False:  #the user says we're already bootstrapped, so skip th
             exit(1)
       
       # Send reflash kernel
+      bootloaderName = args.bootloader
+      if not os.path.isfile(bootloaderName):
+         print(bootloaderName, "does not exist!")
+         exit(1)
+      blSize = os.path.getsize(bootloaderName)
+      preamble = bytearray.fromhex('4c0100')
+      blSizeOffset = blSize + 255
+      blSizeOffset = blSizeOffset.to_bytes(2, 'big')
+      preamble.append(blSizeOffset[0])
+      preamble.append(blSizeOffset[1])
+      ser.write(preamble)
+      response = ser.read(len(preamble))
       print("Uploading reflash kernel...")
+      if args.debug:
+         print("Sent     ", preamble.hex()) 
+         print("Received ", response.hex())
       x = 0
       y = 32
       z = 32 #32 byte chunks
-      while x < len(loader):
-         chunk = loader[x:y]
-         if args.debug:
-            print("X",x, "Y",y, "Z",z)
-         ser.write(chunk)
-         response = ser.read(z)
-         if args.debug:
-            print("Sent     ", chunk.hex()) 
-            print("Received ", response.hex())
-         x += z
-         y += z
-         if y >= len(loader):  # Don't run off the end
-            y = len(loader) 
+      with open(bootloaderName, 'rb') as f:
+         for block in iter(partial(f.read, 32), b''): #block is a 32byte chunk of $file
+           if args.debug:
+              print("X",x, "Y",y, "Z",z)
+           ser.write(block)
+           response = ser.read(z)
+           if args.debug:
+              print("Sent     ", block.hex()) 
+              print("Received ", response.hex())
+           x += z
+           y += z
+           if y >= blSize:  # Don't run off the end
+              y = blSize 
       print("Booting reflash kernel...")
       bootcmd = bytes.fromhex('470100')
       ser.write(bootcmd)
@@ -193,7 +200,7 @@ if args.dumpFile is not None:
          pass
       else:
          exit(1)
-   if args.flashsz == 128:
+   if args.flashsz == '128':
       imageSize = 131071
    else:
       imageSize = 262143
@@ -284,10 +291,10 @@ if args.eraseBank is not None:
       else:
          print("Erase bank", bank, "command sent, applying programming voltage...")
          ser.timeout = 40 # this is longer then the bootloader's timeout so we catch the response
-         ser.rts = True
+         ser.rts = rts_on
          response = ser.read(1)
          ser.timeout = 3
-         ser.rts = False
+         ser.rts = rts_off
          if response == b'\x80':
             print("Erase bank", bank, "command timed out, check programming voltage?")
          elif response == b'\x22':
@@ -389,9 +396,9 @@ if args.binFile is not None:
                   exit(1)
                else:
                   ser.timeout = 40 #long enough to catch the bootloader response on timeout
-                  ser.rts = True
+                  ser.rts = rts_on
                   response = ser.read(1)
-                  ser.rts = False
+                  ser.rts = rts_off
                   ser.timeout = 3
 #                  response = b'\x22'
                   if response == b'\x80':
