@@ -27,10 +27,10 @@ I use this script with the embedded reflash kernel and a [CP2102](https://www.am
 
 #### Write to buffer:
   * Request: ````30 0Y YY````
-         * YY is the count of bytes to write to RAM buffer, zero indexed, ````0x0000```` to ````0xFFFF````. Writes from Command 30 populate a RAM buffer starting at approximately ````0x00490````. This leaves about 800 bytes of RAM for write buffer on an ECU with 2KB ('96-'97).
-    * Response: ````31 0Y YY````
-       * Follow the response with ````0x0YYY```` bytes of data to be written to RAM buffer
-       * Bytes not echoed
+    * `YY YY` is the count of bytes to write to RAM buffer, zero indexed, ````0x0000```` to ````0xFFFF````. Writes from Command 30 populate a RAM buffer starting at approximately ````0x00490````. This leaves about 800 bytes of RAM for write buffer on an ECU with 2KB ('96-'97).
+    * Response: ````31 YY YY````
+       * Follow the response with ````0xYYYY```` bytes of data to be written to RAM buffer
+       * Bytes are not echoed
        * SCI RX does NOT have to be +20V
    * Success: ````22```` is echoed when YYYY bytes have been received.
    * **Note**: The RAM buffer size is limited to the amount of available RAM. I don't recommend greater than ````0x0300```` (768 bytes) unless you know what you're doing.  There is no range check and we will happily try to write off the end of RAM and crash if you ask us to.
@@ -60,9 +60,9 @@ I use this script with the embedded reflash kernel and a [CP2102](https://www.am
 ### EEPROM read:
 ---------
    * Request: ````50 0X XX````
-      * 0X XX represents an EEPROM offset.  For example, the ECU part number is offset 0x01F0 to 0x01F3
+      * 0X XX represents an EEPROM offset.  For example, the ECU part number is offset 0x01F0 to 0x01F2
    * Response: ````51 0X XX YY YY````
-      * This command works in full word widths (16 bits) and thus always returns two bytes.
+      * This command works in full word widths (16 bits) and thus always returns two bytes `YY YY`.
    * Failure:
       * ````51 0X XX 01```` if the EEPROM read fails.
 
@@ -71,6 +71,7 @@ I use this script with the embedded reflash kernel and a [CP2102](https://www.am
    * Request: ````55 0X XX YY YY````
       * 0X XX represents an EEPROM offset.  
       * YY YY is the 16 bit word to write starting at offset 0X XX
+      * SCI RX does _not_ have to be +20V.
    * Response: ````56 0X XX YY YY YY YY````
       * The complete command is echoed with a 56 acknowledge, with the addition of the contents of the EEPROM offset after writing.
       * No error checking is done with these values in the reflash kernel. If they don't match, the write did not succeed. 
