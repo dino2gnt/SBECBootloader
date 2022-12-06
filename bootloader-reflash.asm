@@ -1,3 +1,13 @@
+; bootloader-reflash.asm
+;
+; SBECBootloader (https://github.com/dino2gnt/SBECBootloader)
+; Copyright (C) 2022, Dino Yancey
+;
+; MCU: 68HC16Z
+;
+; A feature-rich monolithic kernel for interacting with
+; 60HC16Z based Chrysler SBEC3 engine management units.
+;
          ORG     $0100
          LBRA    SETUP          ; initialization is at the very end, so it can be run once and overwritten
 START:   jsr     RXBYTE
