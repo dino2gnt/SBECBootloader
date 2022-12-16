@@ -10,7 +10,7 @@ import time
 parser = argparse.ArgumentParser(description='A basic ECU reader & writer for the SBEC3')
 parser.add_argument('--device','-d', dest='serialDevice', action='store', default='/dev/ttyUSB0', help='The serial device to use (default: /dev/ttyUSB0)')
 parser.add_argument('--baud', '-b', dest='Baud', action='store', default=62500, type=float, help='Connection baud rate (default: 62500)')
-parser.add_argument('--bootloader', '-l', dest='bootloader', action='store', default="bootloader.bin", help='Bootloader image to use (default: bootloader.bin)')
+parser.add_argument('--bootloader', '-l', dest='bootloader', action='store', default="bootloader-256K.bin", help='Bootloader image to use (default: bootloader-256K.bin)')
 parser.add_argument('--skip-bootstrap', '-s', dest='readyBS', action='store_const', const=True, default=False, help='If the ECU is already in bootstrap with a running bootloader, use this to skip handshake and upload (default: False)')
 parser.add_argument('--write','-w', dest='binFile', action='store', help='The path and filename of the binary file to write to the ECU')
 parser.add_argument('--writebuffer','-u', dest='bufferSize', action='store', type=int, default=2048,  help='The amount of ECU RAM to use for write buffer. (default: 2048)')
@@ -19,7 +19,7 @@ parser.add_argument('--read-partnum','-p', dest='rpartNum', action='store_const'
 parser.add_argument('--write-partnum','-n', dest='wpartNum', action='store_const', const=True, default=None, help='Write a part number stored to the ECU EEPROM')
 parser.add_argument('--read-vin','-v', dest='rvin', action='store_const', const=True, default=None, help='Read and print the VIN stored in the ECU EEPROM')
 parser.add_argument('--write-vin','-i', dest='wvin', action='store_const', const=True, default=None, help='Write a VIN to the ECU EEPROM')
-parser.add_argument('--flash-size', '-f', dest='flashsz', action="store", choices=['128', '256'], default='256', help='Flash firmware image size. MOST SBEC3 ECUs are 256K (default: 256)')
+parser.add_argument('--flash-size', '-f', dest='flashsz', action="store", choices=['128', '256'], default='256', help='Flash firmware image size. MOST early (-97) SBEC3 ECUs are 128K, most late (98-) are 256K (default: 256)')
 parser.add_argument('--erase', dest='eraseBank', action='store', choices=['0', '1', '2', '3', '4', 'ALL'], default=None, help='Erase Flash Bank [0,1,2,3,4|ALL], required prior to reprogramming (default: None)')
 parser.add_argument('--read-serial', dest='readserial', action='store', default=None, type=int, help='Read READSERIAL bytes of data from the buffer and exit, used to read the output of raw commands.')
 parser.add_argument('--send-serial', dest='sendserial', action='store', default=None, help='Write serial data to the device. Used to send raw commands. Follow with --read-serial # to read # bytes of the response')
@@ -100,7 +100,6 @@ if args.readyBS == False:  #the user says we're already bootstrapped, so skip th
       time.sleep(10)
       ser.rts = rts_off
       print ("20V+ OFF! Trying Magic Byte...")
-      time.sleep(3)
       ser.read(4) #read until timeout to clear the buffer of bootup output
 
       # Handshake ?
@@ -128,8 +127,8 @@ if args.readyBS == False:  #the user says we're already bootstrapped, so skip th
             print(response.hex())
          seed = int.from_bytes(response[4:6], 'big')
          solution = solveSeed(seed=seed)
-         print('Seed: ', seed.to_bytes(2, 'big').hex())
-         print('Solution: ', solution.hex())
+         print('Seed:', seed.to_bytes(2, 'big').hex())
+         print('Solution:', solution.hex())
          seedResp.append(solution[0])
          seedResp.append(solution[1])
          csbyte = checksum(seedResp)
@@ -139,13 +138,12 @@ if args.readyBS == False:  #the user says we're already bootstrapped, so skip th
          ser.write(seedResp)
          response = ser.read(7)
          if response.count(b'\x26\xd0\x67\xc2\x1f') == 1: #fuck yeah, bitches!
-            print(response.hex(), "  Solution accepted!!!")
+            print(response.hex(), "Solution accepted!!!")
          else:
             print("Unexpected seed solution response: ", response.hex())
             exit(1)
       
       # Send reflash kernel
-      bootloaderName = args.bootloader
       if not os.path.isfile(bootloaderName):
          print(bootloaderName, "does not exist!")
          exit(1)
@@ -157,7 +155,7 @@ if args.readyBS == False:  #the user says we're already bootstrapped, so skip th
       preamble.append(blSizeOffset[1])
       ser.write(preamble)
       response = ser.read(len(preamble))
-      print("Uploading reflash kernel...")
+      print("Uploading reflash kernel", bootloaderName, "...")
       if args.debug:
          print("Sent     ", preamble.hex()) 
          print("Received ", response.hex())
@@ -195,7 +193,7 @@ if args.dumpFile is not None:
    fileName = args.dumpFile 
    print("Running bootloader bulk dump command, saving to " + fileName)
    if os.path.isfile(fileName):
-      yn = input(fileName+" Already exists. Overwrite? y/n")
+      yn = input("File "+fileName+" already exists. Overwrite? y/n: ")
       if yn == 'y':
          pass
       else:
@@ -209,8 +207,8 @@ if args.dumpFile is not None:
    y = 0  # start
    z = 64 # bytes per request
    zB = z.to_bytes(2, 'big') # YY YY
-   while y < imageSize:
-      offsetY = y + 262144; # "start" is 0, but the firmware is at 0x40000-0x7FFFF
+   while y < imageSize: 
+      offsetY = y + 262144; # "start" is 0, but the firmware is at 0x40000-0x7FFFF (or 0x40000-0x5FFFF for 128K ECUs)
       offsetY = offsetY.to_bytes(3, 'big') # XX XX XX
       if args.debug:
          print("Y",y, "Z",z, "OffsetY",offsetY.hex())
@@ -290,7 +288,10 @@ if args.eraseBank is not None:
          exit(1)
       else:
          print("Erase bank", bank, "command sent, applying programming voltage...")
-         ser.timeout = 40 # this is longer then the bootloader's timeout so we catch the response
+         if args.flashsz == '128':
+            ser.timeout = 330 # this is longer then the bootloader's timeout so we catch the response
+         else:
+            ser.timeout = 40
          ser.rts = rts_on
          response = ser.read(1)
          ser.timeout = 3
@@ -304,17 +305,19 @@ if args.eraseBank is not None:
          
 # Write
 if args.binFile is not None:
-   bufferSize = args.bufferSize
    if not os.path.isfile(args.binFile):
       print(args.binFile, "does not exist!")
       exit(1)
    if os.path.getsize(args.binFile) > 262144:
-      print("File size is greater than 256K, I don't know what to do with that.")
+      print("File size is greater than 256KB, I don't know what to do with that.")
       exit(1)
-   if args.bufferSize > 3072:
+   elif args.flashsz == 128 and os.path.getsize(args.binFile) > 131071:
+      print("Flash size is 128KB and file size is greater than 128K, I don't know what to do with that.")
+      exit(1)
+   if bufferSize > 3072:
       print("Maximum buffer size is 3072 bytes (to leave space for the bootloader and stack)")
       exit(1)
-   if args.bufferSize % 2:
+   if bufferSize % 2:
       bufferSize += 1  # needs to be whole words
       print("Adjusting buffersize to",bufferSize)
    stageBytes = bufferSize.to_bytes(2, 'big')
@@ -341,7 +344,7 @@ if args.binFile is not None:
          response = ser.read(3)
 #         response = cmd30r
          if args.debug:
-            print("CMD30 Buffer Size:", args.bufferSize)
+            print("CMD30 Buffer Size:", bufferSize)
             print("CMD30 Blocklen   :", len(block))
             print("CMD30 Command    :", cmd30.hex())
             print("CMD30 Response   :", response.hex())
@@ -367,13 +370,13 @@ if args.binFile is not None:
                print("Unexpected response when staging data: ",response.hex())
                exit(1)
             else:
-               print("Transferred",bufferSize,"bytes to RAM buffer")
                if args.debug:
+                  print("Transferred",bufferSize,"bytes to RAM buffer")
                   print("Data staged, attempting to program...")
                cmd40 = bytearray.fromhex('40')
                cmd40r = bytearray.fromhex('41')
                addrBytes = targetAddr.to_bytes(3,'big')   #e.g. "04 00 00"
-               sizeBytes = args.bufferSize.to_bytes(2,'big')   #e.g. "07 FF"
+               sizeBytes = bufferSize.to_bytes(2,'big')   #e.g. "07 FF"
                for bite in addrBytes:
                   cmd40.append(bite)
                   cmd40r.append(bite)
@@ -381,7 +384,7 @@ if args.binFile is not None:
                   cmd40.append(bite)
                   cmd40r.append(bite)
                if args.debug:
-                  ending = targetAddr + args.bufferSize
+                  ending = targetAddr + bufferSize
                   endByte = ending.to_bytes(3,'big')
                   print("Program starting addr: ",addrBytes.hex())
                   print("Program ending addr  : ",endByte.hex())
@@ -395,7 +398,10 @@ if args.binFile is not None:
                   print("Unexpected response to program address command: ", response.hex())
                   exit(1)
                else:
-                  ser.timeout = 40 #long enough to catch the bootloader response on timeout
+                  if args.flashsz == '128':
+                     ser.timeout = 330 # the janky-ass 128K chips can sit and spin a really long time
+                  else:
+                     ser.timeout = 60 #long enough to catch the bootloader response on timeout
                   ser.rts = rts_on
                   response = ser.read(1)
                   ser.rts = rts_off
@@ -406,7 +412,6 @@ if args.binFile is not None:
                      exit(1)
                   elif response == b'\x22':
                      print("Program addr", addrBytes.hex(), "successful!")
-                     print("")
                   else:
                      print("Unexpected response to program command: ", response.hex())
                      exit(1)

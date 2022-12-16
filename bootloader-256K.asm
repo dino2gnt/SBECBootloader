@@ -4,6 +4,7 @@
 ; Copyright (C) 2022, Dino Yancey
 ;
 ; MCU: 68HC16Z
+; For 256KB Flash chip M28F200 or compatible
 ;
 ; A feature-rich monolithic kernel for interacting with
 ; 60HC16Z based Chrysler SBEC3 engine management units.
