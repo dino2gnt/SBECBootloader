@@ -4,7 +4,7 @@
 ; Copyright (C) 2022, Dino Yancey
 ;
 ; MCU: 68HC16Z
-; For 128KB Flash chip TI TMS38F210 or compatible
+; For 128KB Flash chip TI TMS28F210 or compatible
 ;
 ; A feature-rich monolithic kernel for interacting with
 ; 60HC16Z based Chrysler SBEC3 engine management units.
