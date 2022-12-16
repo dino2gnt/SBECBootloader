@@ -1,6 +1,6 @@
-# Experimental SBEC3 reflashing kernel
----------  
-I use this script with the embedded reflash kernel and a [CP2102](https://www.amazon.com/gp/product/B07R3388DW) connected to ground, SCI TX (pin 6 in the OBD2 connector) and SCI RX (pin 25 in the 12-pin diag connector next to the OBD2 connector).  +20V programming voltage is supplied by a 24V PoE adapter I had laying around, turned down to 20V with a [buck converter](https://www.amazon.com/dp/B07VVXF7YX) and switched on and off via the CP2102's RTS output and a cheapy mechanical [relay board](https://www.amazon.com/gp/product/B08C71QL65).  For the 2GNT (and probably Avenger, Sebring, Neon, Cloud cars) there is an [annotated excerpt from the FSM](https://github.com/dino2gnt/SBECBootLoader/blob/master/connections.png) illustrating these connections.  I run everything in Linux. It probably won't work under Windows (and I don't care). 
+# Experimental SBEC3 reflashing kernels
+---------
+I use this script with the embedded reflash kernels and a [CP2102](https://www.amazon.com/gp/product/B07R3388DW) connected to ground, SCI TX (pin 6 in the OBD2 connector) and SCI RX (pin 25 in the 12-pin diag connector next to the OBD2 connector).  +20V programming voltage is supplied by a 24V PoE adapter I had laying around, turned down to 20V with a [buck converter](https://www.amazon.com/dp/B07VVXF7YX) and switched on and off via the CP2102's RTS output and a cheapy mechanical [relay board](https://www.amazon.com/gp/product/B08C71QL65).  For the 2GNT (and probably Avenger, Sebring, Neon, Cloud cars) there is an [annotated excerpt from the FSM](https://github.com/dino2gnt/SBECBootLoader/blob/master/connections.png) illustrating these connections.  I run everything in Linux. It probably won't work under Windows (and I don't care).
 
 If you connect directly to the ECU on a bench, the pins you need are:
 
@@ -23,12 +23,14 @@ For the CP2102:
  * Pin 5V+ connects to DC+ on the relay board
  * Pin GND to DC- on the relay board
  * Connect the other ground pin to a common ground shared by the ECU power supply
- 
+
 On the relay board:
 
  * Connect 20V+ to Normally Closed (NC)
 
 The ecuwriter script toggles the CP2102's RTS pin in order to switch the 20V+ programming voltage on and off.
+
+NB: Different Linux kernel versions may have different defaults for the cp2102; I have had RTS default to high in some environments, and others default to RTS low.  Be aware you may need to swap the connections on NC and NO depending on what your system does with the UART.
 
 ## Commands
 ---------
@@ -42,13 +44,19 @@ The ecuwriter script toggles the CP2102's RTS pin in order to switch the 20V+ pr
     * Success: ````22````
     * Failure: The content of the flash chip's Command State Register containing error bit values
 
-#### Bank base addresses for M28F200 and compatible flash chips:
+#### Bank base addresses for M28F200 (256KB) and compatible flash chips:
 ---------
    * Bank 0: ````0x40000```` (16K)
    * Bank 1: ````0x44000```` (8k)
    * Bank 2: ````0x46000```` (8K)
    * Bank 3: ````0x48000```` (96K)
    * Bank 4: ````0x60000```` (128K)
+  
+#### Bank addresses for TMS28F210 (128KB) and compatible flash chips:
+---------
+   * Bank 0: ````0x40000```` (128K)
+   * These chips should be byte-addressable and do not require  (or provide) per-bank erasure capabilities
+   * Always specify `--erase 0` so the erase algorithm starts from address `0x40000`
 
 ### Write:
 ---------
@@ -97,17 +105,17 @@ The ecuwriter script toggles the CP2102's RTS pin in order to switch the 20V+ pr
 ### EEPROM write:
 ---------
    * Request: ````55 0X XX YY YY````
-      * 0X XX represents an EEPROM offset.  
+      * 0X XX represents an EEPROM offset.
       * YY YY is the 16 bit word to write starting at offset 0X XX
       * SCI RX does _not_ have to be +20V.
    * Response: ````56 0X XX YY YY YY YY````
       * The complete command is echoed with a 56 acknowledge, with the addition of the contents of the EEPROM offset after writing.
-      * No error checking is done with these values in the reflash kernel. If they don't match, the write did not succeed. 
+      * No error checking is done with these values in the reflash kernel. If they don't match, the write did not succeed.
    * Failure:
       * ````56 0X XX YY YY 01```` if the EEPROM write fails. (probably?)
 
 # ECUWriter script
----------  
+---------
 Shows off the basic functions of the reflash kernel. I'm not fluent in Python, so be warned. Requires argparse, signal, time, and pyserial.
 ```
 $ ./ecuwriter.py --help
@@ -147,7 +155,7 @@ options:
   ```
 
 # Checksum script
----------  
+---------
 For writing updated checksums to modified firmware images. Again, not fluent in Python, so Don't Blame Dino™. Requires argparse, signal.
 ```
 $ ./checksum.py --help
@@ -162,4 +170,29 @@ optional arguments:
   --write-checksum WRITE, -w WRITE
                         Write the checksum to the firmware image. (default False)
   --debug DEBUG         Show lots of debug output
+```
+
+# Examples
+----
+
+```
+(08:23PM) dino@yourmomshouse SBECBootLoader $ ./ecuwriter.py --flash-size 128 --bootloader bootloader-128K.bin --read-vin
+Using device /dev/ttyUSB0 at 62500 baud, 8N1
+Will apply 20V+ to SCI RX for bootstrap.  Ready? y/n/s(kip): y
+20V+ ON for 10 seconds. Turn key on now!
+20V+ OFF! Trying Magic Byte...
+06 Synced at 62500 baud
+Seed: 582d
+Solution: e57f
+26d067c21f Solution accepted!!!
+Uploading reflash kernel bootloader-128K.bin ...
+Booting reflash kernel...
+47010022  Kernel running!
+11  Kernel alive!
+Vehicle Identification Number from EEPROM:  4A3AK44Y0VE097567
+(08:23PM) dino@yourmomshouse SBECBootLoader $ ./ecuwriter.py --flash-size 128 --bootloader bootloader-128K.bin --read-partnum
+Using device /dev/ttyUSB0 at 62500 baud, 8N1
+Will apply 20V+ to SCI RX for bootstrap.  Ready? y/n/s(kip): s
+Skipping bootstrap!
+Part number from EEPROM:  05293014
 ```
