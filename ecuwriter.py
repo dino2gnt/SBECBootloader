@@ -144,6 +144,7 @@ if args.readyBS == False:  #the user says we're already bootstrapped, so skip th
             exit(1)
       
       # Send reflash kernel
+      bootloaderName = args.bootloader
       if not os.path.isfile(bootloaderName):
          print(bootloaderName, "does not exist!")
          exit(1)
