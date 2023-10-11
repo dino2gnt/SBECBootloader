@@ -32,22 +32,27 @@ CMD_10:  ldab    #$11
          jsr     TXBYTE
          beq     START
 
-TXBYTE:  LDAA    $7C0C,Z        ; TX function
+TXBYTE:  
+         LDAA    $7C0C,Z        ; TX function
          ANDA    #$01
          BEQ     TXBYTE
          STAB    $7C0F,Z
          LDD     #$0043         ; this is the TX delay interval
          JSR     DELAY
          RTS
-RXBYTE:  LDAA    $7C0D,Z        ; RX function
+RXBYTE:  
+         LDAA    $7C0D,Z        ; RX function
          ANDA    #$42
          CMPA    #$40
          BNE     RXBYTE
          LDAB    $7C0F,Z
          RTS
-DELAY:   SUBD    #$0001         ; Delay function
+
+DELAY:   
+         SUBD    #$0001         ; Delay function
          BNE     DELAY
          RTS
+
 RDR_X:   NOP                    ; Reader X byte
 ;  Command 45 / Memory dump:
 CMD_45:  ldab    #$46            ; sequence will be:
@@ -102,11 +107,12 @@ ERLOOP:  jsr     INITGPT         ; init GPT
 
 TMRLOOP: brclr   $7922,Z,#$10,TMRGOOD
          jsr     TIMEOUT         ; Reset timeout until retries=0
-         jsr     CLRSTAT
          decw    CNTBYTE         ; 256 divider with 15 retries should be over 10 clock seconds?
          beq     ER_TMOUT
 
-TMRGOOD: jsr     ERASE           ; if WSM is ready, send erase commands
+TMRGOOD:
+         jsr     CLRSTAT
+         jsr     ERASE           ; if WSM is ready, send erase commands
          jsr     RD_STAT         ; Fetch status
          andd    #$80            ; check ready bit
          beq     TMRLOOP         ; bit 8 = 0, busy / not ready
